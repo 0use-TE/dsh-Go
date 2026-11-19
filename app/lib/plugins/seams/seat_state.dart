@@ -141,13 +141,21 @@ final seatRenderersProvider = Provider<SeatRenderers>(
 /// package (a plugin's own page) or one cell.
 @immutable
 class SeatRequest {
-  const SeatRequest({required this.slot, required this.placement, this.sessionId, this.package, this.cell});
+  const SeatRequest({
+    required this.slot,
+    required this.placement,
+    this.sessionId,
+    this.package,
+    this.cell,
+    this.viewId,
+  });
 
   final String slot;
   final SeatPlacement placement;
   final String? sessionId;
   final String? package;
   final String? cell;
+  final String? viewId;
 
   @override
   bool operator ==(Object other) =>
@@ -156,10 +164,11 @@ class SeatRequest {
       other.placement == placement &&
       other.sessionId == sessionId &&
       other.package == package &&
-      other.cell == cell;
+      other.cell == cell &&
+      other.viewId == viewId;
 
   @override
-  int get hashCode => Object.hash(slot, placement, sessionId, package, cell);
+  int get hashCode => Object.hash(slot, placement, sessionId, package, cell, viewId);
 }
 
 /// A seat's context and planned items.
@@ -189,6 +198,7 @@ final seatPlanProvider = Provider.autoDispose.family<SeatPlan, SeatRequest>((ref
     host: host,
     sessionId: request.sessionId,
     placement: request.placement,
+    viewId: request.viewId,
     webAvailable: inventory?.webReachable ?? false,
   );
   if (inventory == null) return SeatPlan(seat, const []);

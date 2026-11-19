@@ -25400,6 +25400,21 @@ class L10nEn extends L10n {
   String get tavernPackExportChanged => 'The export\'s sources or options changed; preview again';
 
   @override
+  String get terminalDockHide => 'Hide terminal (Ctrl + `)';
+
+  @override
+  String get terminalColorTitle => 'Terminal colors';
+
+  @override
+  String get terminalColorBlue => 'Deep blue';
+
+  @override
+  String get terminalColorClassic => 'Classic black';
+
+  @override
+  String get terminalColorSaveFailed => 'Could not save terminal colors. Please try again.';
+
+  @override
   String get updateCheck => 'Check for updates';
 
   @override
@@ -28791,6 +28806,22 @@ class L10nEn extends L10n {
 
   @override
   String get workshopPublishLetGoUnsupported => 'This version can\'t let go of the record here.';
+
+  @override
+  String get workspaceSaveFailed => 'Could not save the panel layout. Please try again.';
+
+  @override
+  String get pluginDisplayIndependent => 'Show independently';
+
+  @override
+  String get pluginDisplayIndependentHint =>
+      'Move this plugin from the details’ Plugins page into its own workspace tab on wide screens.';
+
+  @override
+  String get pluginDisplaySaveFailed => 'Could not save the plugin display preference. Please try again.';
+
+  @override
+  String get workspaceDragHint => 'Drag tabs to reorder or split; on touchscreens, hold first';
 
   @override
   String get workspaceRecoveryTitle => 'Workspace index recovery';

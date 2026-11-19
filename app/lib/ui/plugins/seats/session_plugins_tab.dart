@@ -10,6 +10,8 @@ import '../../../l10n/l10n.dart';
 import '../../../plugins/native/native_state.dart';
 import '../../../plugins/seams/seams.dart';
 import '../../../state/plugins_state.dart';
+import '../../../state/hosts_state.dart';
+import '../../../state/workspace_panels_state.dart';
 import '../../common/app_sheet.dart' show groupTitleStyle;
 import '../../common/list_page_row.dart';
 import '../../theme/app_icons.dart';
@@ -20,20 +22,40 @@ import 'seat_links.dart';
 /// tabs, then its plugin views. Without conversation tabs, global panels
 /// remain alongside those views; they keep their root scope even though
 /// this entry lives inside a conversation.
-final sessionPluginPlanProvider = Provider.autoDispose.family<SeatPlan, String>((ref, sessionId) {
-  final tabs = ref.watch(seatPlanProvider(SessionPluginsTab.requestFor(sessionId)));
-  final views = ref.watch(seatPlanProvider(SessionPluginsTab.viewsFor(sessionId)));
+final sessionPluginPlanProvider = Provider.autoDispose.family<SeatPlan, String>(
+  (ref, sessionId) => _pluginPlan(ref, sessionId),
+);
+
+/// Wide details keep the original list, excluding only packages moved outside.
+final embeddedSessionPluginPlanProvider = Provider.autoDispose.family<SeatPlan, String>(
+  (ref, sessionId) => _pluginPlan(ref, sessionId, excludeIndependent: true),
+);
+
+SeatPlan _pluginPlan(Ref ref, String sessionId, {bool excludeIndependent = false}) {
+  final preferences = excludeIndependent ? ref.watch(pluginDisplayProvider(ref.watch(activeHostProvider))) : null;
+  SeatPlan planFor(SeatRequest request) {
+    final plan = ref.watch(seatPlanProvider(request));
+    if (preferences == null) return plan;
+    return SeatPlan(plan.seat, [
+      for (final item in plan.items)
+        if (!(preferences[item.occupant.package]?.independent ?? false)) item,
+    ]);
+  }
+
+  final tabs = planFor(SessionPluginsTab.requestFor(sessionId));
+  final views = planFor(SessionPluginsTab.viewsFor(sessionId));
   if (!tabs.isEmpty) {
     return views.isEmpty ? tabs : SeatPlan(tabs.seat, [...tabs.items, ...views.items]);
   }
-  final panels = ref.watch(seatPlanProvider(const SeatRequest(slot: Slots.main, placement: SeatPlacement.page)));
+  final panels = planFor(const SeatRequest(slot: Slots.main, placement: SeatPlacement.page));
   return views.isEmpty ? panels : SeatPlan(views.seat, [...views.items, ...panels.items]);
-});
+}
 
 class SessionPluginsTab extends ConsumerWidget {
-  const SessionPluginsTab({super.key, required this.sessionId});
+  const SessionPluginsTab({super.key, required this.sessionId, this.excludeIndependent = false});
 
   final String sessionId;
+  final bool excludeIndependent;
 
   /// The seat behind the tab; 对话详情 shows the tab only while it has
   /// something to show.
@@ -47,7 +69,9 @@ class SessionPluginsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
-    final plan = ref.watch(sessionPluginPlanProvider(sessionId));
+    final plan = ref.watch(
+      excludeIndependent ? embeddedSessionPluginPlanProvider(sessionId) : sessionPluginPlanProvider(sessionId),
+    );
     final items = plan.visible;
     if (items.isEmpty) return const SizedBox.shrink();
     final bundles = ref.watch(installedPluginsProvider.select((s) => s.value));

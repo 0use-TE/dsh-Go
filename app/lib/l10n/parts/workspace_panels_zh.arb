@@ -1,0 +1,7 @@
+{
+  "workspaceSaveFailed": "无法保存面板布局，请重试。",
+  "pluginDisplayIndependent": "独立显示",
+  "pluginDisplayIndependentHint": "在宽屏下，将此插件从详情的“插件”页移到独立的工作区页签。",
+  "pluginDisplaySaveFailed": "无法保存插件显示方式，请重试。",
+  "workspaceDragHint": "拖动页签调整顺序或拆分；触屏请长按"
+}

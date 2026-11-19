@@ -86,13 +86,22 @@ enum SeatPlacement {
 /// Host, conversation and placement of one seat.
 @immutable
 class SeatContext {
-  const SeatContext({required this.host, this.sessionId, required this.placement, this.webAvailable = true});
+  const SeatContext({
+    required this.host,
+    this.sessionId,
+    required this.placement,
+    this.webAvailable = true,
+    this.viewId,
+  });
 
   final HostRef host;
 
   /// Set for session / session-maybe slots.
   final String? sessionId;
   final SeatPlacement placement;
+
+  /// Separate simultaneous UI surfaces without changing plugin scope.
+  final String? viewId;
 
   /// The host serves DSH Web to this connection (not over the relay): islands
   /// and "open in DSH Web" entries are possible.
@@ -104,10 +113,11 @@ class SeatContext {
       other.host == host &&
       other.sessionId == sessionId &&
       other.placement == placement &&
+      other.viewId == viewId &&
       other.webAvailable == webAvailable;
 
   @override
-  int get hashCode => Object.hash(host, sessionId, placement, webAvailable);
+  int get hashCode => Object.hash(host, sessionId, placement, webAvailable, viewId);
 }
 
 /// What the inventory knows about one package (§5): the read-only facts a
@@ -189,6 +199,7 @@ class IslandSpec {
     this.package,
     this.sessionId,
     this.maskOfficial = false,
+    this.viewId,
   });
 
   final HostRef host;
@@ -205,6 +216,9 @@ class IslandSpec {
   /// A list slot: the bridge hides the official entries in island mode.
   final bool maskOfficial;
 
+  /// Separates WebViews when one plugin has multiple visible entries.
+  final String? viewId;
+
   /// Identity for reuse and failure bookkeeping.
   String get key => [
     host.kind.name,
@@ -213,6 +227,7 @@ class IslandSpec {
     slot,
     package != null && package != cell ? '$package:${cell ?? ''}' : (cell ?? ''),
     sessionId ?? '',
+    ?viewId,
   ].join('|');
 
   @override
@@ -224,10 +239,11 @@ class IslandSpec {
       other.cell == cell &&
       other.package == package &&
       other.sessionId == sessionId &&
+      other.viewId == viewId &&
       other.maskOfficial == maskOfficial;
 
   @override
-  int get hashCode => Object.hash(host, form, slot, cell, package, sessionId, maskOfficial);
+  int get hashCode => Object.hash(host, form, slot, cell, package, sessionId, maskOfficial, viewId);
 
   @override
   String toString() => 'IslandSpec($key)';

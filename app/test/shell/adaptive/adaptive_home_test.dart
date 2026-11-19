@@ -6,17 +6,25 @@
 //   flutter test --update-goldens test/shell/adaptive/adaptive_home_test.dart
 
 import 'package:dsh_app/state/adaptive_layout_state.dart';
+import 'package:dsh_app/state/hosts_state.dart';
+import 'package:dsh_app/state/workspace_panels_state.dart';
 import 'package:dsh_app/ui/chat/chat_screen.dart';
 import 'package:dsh_app/ui/chat/composer.dart';
 import 'package:dsh_app/ui/session/session_detail_page.dart';
+import 'package:dsh_app/ui/plugins/seats/right_workspace_panel.dart';
+import 'package:dsh_app/ui/plugins/seats/session_plugins_tab.dart';
+import 'package:dsh_app/ui/plugins/seats/plugin_seat_page.dart';
 import 'package:dsh_app/ui/shell/adaptive/detail_sheet.dart';
 import 'package:dsh_app/ui/shell/sessions_drawer.dart';
+import 'package:dsh_app/ui/shell/home_shell.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../chat/support/harness.dart';
 import 'support.dart';
+import '../../plugins/native/native_panel_test.dart' as plugins;
 
 const _eps = 0.01;
 Matcher _near(double v) => closeTo(v, _eps);
@@ -63,8 +71,69 @@ void main() {
   });
   tearDown(thawClocks);
 
+  testWidgets(
+    'embedded plugins keep the original navigation and view list; independent display moves only its package',
+    (tester) async {
+      useWindow(tester, _wide);
+      mockClipboard(tester);
+      await tester.pumpWidget(
+        testApp(
+          HomeShell(chatBuilder: (openDrawer) => ChatScreen(onOpenDrawer: openDrawer, backdrop: false)),
+          overrides: [...homeOverrides(), ...plugins.panelOverrides(plugins.usageBridge(), plugins.inventory())],
+        ),
+      );
+      await pumpFrames(tester, 2);
+      await tester.pump(const Duration(milliseconds: 600));
+      final container = ProviderScope.containerOf(tester.element(find.byType(SessionDetailPage)));
+      final entry = container.read(workspacePanelEntriesProvider('s1')).firstWhere((e) => e.cell == 'dsh-go:usage');
+      final outer = find.byKey(ValueKey('workspace-main-${entry.key}'));
+      final labels = tester.widget<GlassSegments>(find.byType(GlassSegments)).labels;
+      expect(labels.last, '插件');
+      expect(labels, isNot(contains('用量')));
+      expect(outer, findsNothing);
+      await tester.tap(find.text('插件'));
+      await pumpFrames(tester, 8);
+      expect(find.text('用量'), findsOneWidget);
+      expect(find.text('web-only'), findsOneWidget);
+      expect(find.text('¥0.42'), findsNothing, reason: 'multiple views wait for the second click');
+      await expectLater(find.byType(RightWorkspacePanel), matchesGoldenFile('goldens/wide_plugin_embedded.png'));
+      await tester.tap(find.text('用量'));
+      await pumpFrames(tester, 8);
+      expect(find.byType(PluginSeatPage), findsOneWidget);
+      expect(find.text('¥0.42'), findsOneWidget);
+      Navigator.of(tester.element(find.text('¥0.42'))).pop();
+      await pumpFrames(tester, 8);
+      await container.read(pluginDisplayProvider(HostRef.local).notifier).setIndependent(entry.package, '用量', true);
+      await pumpFrames(tester, 8);
+      expect(tester.widget<GlassSegments>(find.byType(GlassSegments)).labels.last, '插件');
+      expect(
+        container
+            .read(embeddedSessionPluginPlanProvider('s1'))
+            .visible
+            .any((item) => item.occupant.package == entry.package),
+        isFalse,
+      );
+      expect(outer, findsOneWidget);
+      await tester.tap(outer);
+      await pumpFrames(tester, 8);
+      expect(find.text('¥0.42'), findsOneWidget);
+      await expectLater(find.byType(RightWorkspacePanel), matchesGoldenFile('goldens/wide_plugin_independent.png'));
+      await container.read(pluginDisplayProvider(HostRef.local).notifier).setIndependent(entry.package, '用量', false);
+      await pumpFrames(tester, 8);
+      expect(outer, findsNothing);
+      SessionDetailPage.open(tester.element(find.byType(ChatScreen)), 's1', tab: SessionTab.plugins);
+      await pumpFrames(tester, 8);
+      expect(find.text('用量'), findsOneWidget);
+      expect(find.text('¥0.42'), findsNothing);
+      await tester.tap(find.text('用量'));
+      await pumpFrames(tester, 8);
+      expect(find.text('¥0.42'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   group('1280 × 800, 对话详情 beside the chat', () {
-    testWidgets('rail keys on the header line and the composer line', (tester) async {
+    testWidgets('rail keys align with the header and composer', (tester) async {
       await _pumpHome(tester);
       expect(tester.takeException(), isNull);
       final menu = _key(tester, 'rail-menu');
@@ -79,7 +148,9 @@ void main() {
       expect(search.left, _near(menu.left));
       expect(search.top - menu.bottom, _near(8));
       expect(settings.left, _near(menu.left));
-      expect(settings.bottom, _near(composer.bottom));
+      // A hidden terminal occupies no space below the composer.
+      expect(settings.bottom, _near(_wide.height - 24));
+      expect(composer.bottom, _near(settings.bottom));
       // The rail owns ≡: the header has none, its pill starts on the chat
       // column's 12.
       expect(find.byKey(const ValueKey('chat-menu')), findsNothing);
@@ -88,7 +159,7 @@ void main() {
 
     testWidgets('panel: edges, bar on the header line, tabs on 16', (tester) async {
       await _pumpHome(tester);
-      final panel = tester.getRect(find.byType(SessionDetailPage));
+      final panel = tester.getRect(find.byType(RightWorkspacePanel));
       expect(panel, const Rect.fromLTWH(896, 0, 384, 800));
       final line = _key(tester, 'adaptive-panel-hairline');
       expect(line.left, _near(896));

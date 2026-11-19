@@ -1,0 +1,7 @@
+{
+  "terminalDockHide": "Hide terminal (Ctrl + `)",
+  "terminalColorTitle": "Terminal colors",
+  "terminalColorBlue": "Deep blue",
+  "terminalColorClassic": "Classic black",
+  "terminalColorSaveFailed": "Could not save terminal colors. Please try again."
+}

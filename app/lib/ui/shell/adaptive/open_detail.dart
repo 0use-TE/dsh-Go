@@ -7,6 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../state/adaptive_layout_state.dart';
 import '../../../state/sessions_state.dart' show currentSessionProvider;
+import '../../../state/hosts_state.dart' show activeHostProvider;
+import '../../../state/workspace_panels_state.dart' show rightWorkspaceTabProvider, independentWorkspaceEntriesProvider;
+import '../../plugins/seats/session_plugins_tab.dart' show embeddedSessionPluginPlanProvider;
 import '../../session/session_tab.dart';
 import 'adaptive_layout.dart';
 import 'adaptive_scaffold.dart';
@@ -30,9 +33,6 @@ void openAdaptiveDetail(
   required WidgetBuilder sheet,
 }) {
   final container = ProviderScope.containerOf(context, listen: false);
-  if (tab != null) {
-    container.read(sessionDetailTabProvider.notifier).select(tab);
-  }
   final current = container.read(currentSessionProvider) == sessionId;
   final prefs = container.read(layoutPrefsProvider);
   final layout =
@@ -46,8 +46,19 @@ void openAdaptiveDetail(
       );
   final controller = container.read(layoutPrefsProvider.notifier);
   final navigator = Navigator.of(context);
+  final independent = container.read(independentWorkspaceEntriesProvider(sessionId));
+  final embedded = container.read(embeddedSessionPluginPlanProvider(sessionId));
+  final plugin = current && layout.detail == DetailPresentation.panel && tab == SessionTab.plugins && embedded.isEmpty
+      ? independent.firstOrNull
+      : null;
+  if (tab != null && plugin == null) {
+    container.read(sessionDetailTabProvider.notifier).select(tab);
+  }
   switch (layout.detail) {
     case DetailPresentation.panel when current:
+      container
+          .read(rightWorkspaceTabProvider((container.read(activeHostProvider), sessionId)).notifier)
+          .select(plugin?.key);
       // The panel lives beside the chat: uncover it.
       navigator.popUntil((route) => route.isFirst);
       final fold = toggle && layout.panelShown && tab == null;

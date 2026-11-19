@@ -24111,6 +24111,21 @@ class L10nZh extends L10n {
   String get tavernPackExportChanged => '导出的来源或选项变了，请重新预览';
 
   @override
+  String get terminalDockHide => '隐藏终端（Ctrl + `）';
+
+  @override
+  String get terminalColorTitle => '终端配色';
+
+  @override
+  String get terminalColorBlue => '深蓝色';
+
+  @override
+  String get terminalColorClassic => '经典黑色';
+
+  @override
+  String get terminalColorSaveFailed => '无法保存终端配色，请重试。';
+
+  @override
   String get updateCheck => '检查更新';
 
   @override
@@ -27333,6 +27348,21 @@ class L10nZh extends L10n {
 
   @override
   String get workshopPublishLetGoUnsupported => '这个版本没法在这里放下记录。';
+
+  @override
+  String get workspaceSaveFailed => '无法保存面板布局，请重试。';
+
+  @override
+  String get pluginDisplayIndependent => '独立显示';
+
+  @override
+  String get pluginDisplayIndependentHint => '在宽屏下，将此插件从详情的“插件”页移到独立的工作区页签。';
+
+  @override
+  String get pluginDisplaySaveFailed => '无法保存插件显示方式，请重试。';
+
+  @override
+  String get workspaceDragHint => '拖动页签调整顺序或拆分；触屏请长按';
 
   @override
   String get workspaceRecoveryTitle => '工作区索引救援';

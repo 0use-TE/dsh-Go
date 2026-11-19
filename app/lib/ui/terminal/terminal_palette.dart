@@ -1,38 +1,39 @@
 // Colours of the terminal page's dark card, shared by the emulator, the key row
-// and the status row. Dark in both app themes, like the engine page's log card;
-// tinted by the current palette.
+// and the status row. Dark in both app themes; the user can choose deep blue
+// or the original palette's dark neutrals.
 
 import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart' show TerminalTheme;
 
+import '../../state/terminal_color_state.dart';
 import '../theme/theme.dart';
 
-/// The dark terminal card's colours under one palette ([AppAccent]): the
-/// palette's dark neutrals one step below the dark code well, and its
-/// accent as a soft tone that reads on them. Mist gives the original values.
+/// The selected terminal surface with text and ANSI colors from the app palette.
 @immutable
 class TerminalPalette {
-  TerminalPalette._(AppAccent accent) : this._from(accent, NeutralTones.forAccent(accent));
+  TerminalPalette._(AppAccent accent, TerminalColor color) : this._from(accent, NeutralTones.forAccent(accent), color);
 
-  TerminalPalette._from(AppAccent accent, NeutralTones n)
-    : background = n.terminal,
-      key = n.terminalKey,
+  TerminalPalette._from(AppAccent accent, NeutralTones n, TerminalColor color)
+    : background = color == TerminalColor.blue ? const Color(0xFF152B46) : n.terminal,
+      key = color == TerminalColor.blue ? const Color(0xFF25415F) : n.terminalKey,
       foreground = n.paper,
       muted = n.paperFaint,
       accent = _softAccent(accent),
       _ansi = DshColors.dark.ansi;
 
   /// The palette of the theme around [context].
-  static TerminalPalette of(BuildContext context) => forAccent(DshSurfaces.of(context).accent);
+  static TerminalPalette of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<TerminalPaletteScope>()?.palette ??
+      forAccent(DshSurfaces.of(context).accent);
 
-  static TerminalPalette forAccent(AppAccent accent) {
-    final hit = _cache[accent];
+  static TerminalPalette forAccent(AppAccent accent, {TerminalColor color = TerminalColor.classic}) {
+    final hit = _cache[(accent, color)];
     if (hit != null) return hit;
     if (_cache.length > 8) _cache.clear();
-    return _cache[accent] = TerminalPalette._(accent);
+    return _cache[(accent, color)] = TerminalPalette._(accent, color);
   }
 
-  static final _cache = <AppAccent, TerminalPalette>{};
+  static final _cache = <(AppAccent, TerminalColor), TerminalPalette>{};
 
   /// The card: one step deeper than the dark code well.
   final Color background;
@@ -103,4 +104,11 @@ class TerminalPalette {
       searchHitForeground: background,
     );
   }
+}
+
+class TerminalPaletteScope extends InheritedWidget {
+  const TerminalPaletteScope({super.key, required this.palette, required super.child});
+  final TerminalPalette palette;
+  @override
+  bool updateShouldNotify(TerminalPaletteScope oldWidget) => palette != oldWidget.palette;
 }

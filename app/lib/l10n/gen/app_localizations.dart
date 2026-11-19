@@ -44222,6 +44222,36 @@ abstract class L10n {
   /// **'导出的来源或选项变了，请重新预览'**
   String get tavernPackExportChanged;
 
+  /// No description provided for @terminalDockHide.
+  ///
+  /// In zh, this message translates to:
+  /// **'隐藏终端（Ctrl + `）'**
+  String get terminalDockHide;
+
+  /// No description provided for @terminalColorTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'终端配色'**
+  String get terminalColorTitle;
+
+  /// No description provided for @terminalColorBlue.
+  ///
+  /// In zh, this message translates to:
+  /// **'深蓝色'**
+  String get terminalColorBlue;
+
+  /// No description provided for @terminalColorClassic.
+  ///
+  /// In zh, this message translates to:
+  /// **'经典黑色'**
+  String get terminalColorClassic;
+
+  /// No description provided for @terminalColorSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法保存终端配色，请重试。'**
+  String get terminalColorSaveFailed;
+
   /// No description provided for @updateCheck.
   ///
   /// In zh, this message translates to:
@@ -49975,6 +50005,36 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'这个版本没法在这里放下记录。'**
   String get workshopPublishLetGoUnsupported;
+
+  /// No description provided for @workspaceSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法保存面板布局，请重试。'**
+  String get workspaceSaveFailed;
+
+  /// No description provided for @pluginDisplayIndependent.
+  ///
+  /// In zh, this message translates to:
+  /// **'独立显示'**
+  String get pluginDisplayIndependent;
+
+  /// No description provided for @pluginDisplayIndependentHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'在宽屏下，将此插件从详情的“插件”页移到独立的工作区页签。'**
+  String get pluginDisplayIndependentHint;
+
+  /// No description provided for @pluginDisplaySaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法保存插件显示方式，请重试。'**
+  String get pluginDisplaySaveFailed;
+
+  /// No description provided for @workspaceDragHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'拖动页签调整顺序或拆分；触屏请长按'**
+  String get workspaceDragHint;
 
   /// No description provided for @workspaceRecoveryTitle.
   ///

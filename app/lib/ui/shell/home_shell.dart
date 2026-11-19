@@ -44,6 +44,8 @@ import '../share_code/share_code_host.dart';
 import '../tavern/tavern_intake.dart';
 import '../star/star_prompt_host.dart';
 import '../theme/theme.dart';
+import '../terminal/terminal_dock_layout.dart';
+import '../plugins/seats/right_workspace_panel.dart';
 import '../update/update_launch_check.dart';
 import '../wallpaper/wallpaper_backdrop.dart';
 import '../web/local_web_screen.dart';
@@ -381,7 +383,9 @@ class _HomeShellState extends ConsumerState<HomeShell> with TickerProviderStateM
                           drawerWidth: width,
                           quickPanel: _quickPanel,
                           quickPanelWidth: _quickPanelWidth(context),
-                          child: AdaptiveScaffold(
+                          child: TerminalDockLayout(
+                            sessionId: sessionId,
+                            enabled: !_open && !_quickPanelOpen,
                             layout: layout,
                             // Stored choices arriving at launch snap into place.
                             animate: prefs.loaded,
@@ -410,7 +414,11 @@ class _HomeShellState extends ConsumerState<HomeShell> with TickerProviderStateM
                               onSettings: () => _openDestination(DrawerDestination.settings),
                             ),
                             panel: layout.panelAvailable && sessionId != null
-                                ? SessionDetailPage.panel(key: ValueKey(sessionId), sessionId: sessionId)
+                                ? RightWorkspacePanel(
+                                    key: ValueKey(sessionId),
+                                    sessionId: sessionId,
+                                    details: SessionDetailPage.panel(sessionId: sessionId, showPanelBar: false),
+                                  )
                                 : null,
                           ),
                         ),

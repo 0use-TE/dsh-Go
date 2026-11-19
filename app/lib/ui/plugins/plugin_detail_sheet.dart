@@ -7,11 +7,13 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../l10n/l10n.dart';
 import '../../plugins/native/native_state.dart';
-import '../../plugins/seams/seams.dart' show PluginSeat, SeatPlacement, Slots, seatPlanProvider;
+import '../../plugins/seams/seams.dart' show PluginSeat, SeatPlacement, Slots, seatPlanProvider, seatInventoryProvider;
 import '../../share_code/plugin_share.dart' show sharedPluginFromBundle;
 import '../../state/plugin_config/plugin_config_state.dart';
 import '../../links/plugin_links.dart' show marketPluginLink;
 import '../../state/plugins_state.dart';
+import '../../state/hosts_state.dart';
+import '../../state/workspace_panels_state.dart';
 import '../../state/runtime_capabilities_state.dart';
 import '../../update/version.dart';
 import '../common/app_sheet.dart';
@@ -426,6 +428,29 @@ class BundleSheet extends ConsumerWidget {
     // The plugin's name for people (its native title, else the bundle's);
     // the package name stays as the quiet line under it.
     final display = ref.watch(nativePluginTitleProvider(bundle.name));
+    final hostRef = ref.watch(activeHostProvider);
+    final displayPrefs = ref.watch(pluginDisplayProvider(hostRef));
+    final inventory = ref.watch(seatInventoryProvider);
+    final hasPanel =
+        inventory != null &&
+        (inventory.nativePanels.any((panel) => panel.package == name) ||
+            [
+              Slots.rightPaneTab,
+              Slots.conversationView,
+              Slots.main,
+              Slots.dshGoPanel,
+            ].any((slot) => inventory.occupantsFor(slot).any((entry) => entry.package == name)));
+    final independent = displayPrefs[name]?.independent ?? false;
+    Future<void> setIndependent(bool value) async {
+      try {
+        await ref.read(pluginDisplayProvider(hostRef).notifier).setIndependent(name, display, value);
+      } catch (_) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.pluginDisplaySaveFailed)));
+        }
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -482,6 +507,26 @@ class BundleSheet extends ConsumerWidget {
                         trailing: Switch.adaptive(
                           value: bundle.enabled,
                           onChanged: (v) => unawaited(togglePluginBundle(context, bundle, v)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
+              if (!gone && (hasPanel || displayPrefs.containsKey(name))) ...[
+                ListPageCard(
+                  margin: EdgeInsets.zero,
+                  children: [
+                    MergeSemantics(
+                      child: ListPageRow(
+                        title: l10n.pluginDisplayIndependent,
+                        subtitle: l10n.pluginDisplayIndependentHint,
+                        onTap: () => unawaited(setIndependent(!independent)),
+                        trailing: Switch.adaptive(
+                          key: const ValueKey('plugin-independent-switch'),
+                          value: independent,
+                          onChanged: (value) => unawaited(setIndependent(value)),
                         ),
                       ),
                     ),

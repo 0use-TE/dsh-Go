@@ -250,6 +250,7 @@ class SlotAdapterRegistry {
       package: whole ? null : o.package,
       sessionId: info?.scope == SlotScope.root ? null : seat.sessionId,
       maskOfficial: policy.masksOfficial,
+      viewId: seat.viewId,
     );
   }
 }

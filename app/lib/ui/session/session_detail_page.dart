@@ -8,6 +8,9 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
+
+import '../../plugins/seams/seams.dart' show SeatPlan;
 
 import '../../l10n/l10n.dart';
 import '../../state/adaptive_layout_state.dart';
@@ -46,6 +49,7 @@ import '../shell/adaptive/detail_sheet.dart';
 import '../shell/adaptive/open_detail.dart';
 import '../shell/page_frame.dart';
 import '../terminal/terminal_page.dart';
+import '../terminal/terminal_dock_scope.dart';
 import '../theme/app_icons.dart';
 import '../theme/theme.dart';
 import 'conversation_panes.dart';
@@ -96,10 +100,11 @@ bool dispatchedSubagents(Iterable<ChatItem> items) =>
 /// through [open]. 子代理 shows once the conversation has dispatched subagents,
 /// or when opened from a subagent entry.
 class SessionDetailPage extends ConsumerStatefulWidget {
-  const SessionDetailPage({super.key, required this.sessionId, this.initialTab, this.mode = SessionDetailMode.page});
+  const SessionDetailPage({super.key, required this.sessionId, this.initialTab, this.mode = SessionDetailMode.page})
+    : showPanelBar = true;
 
   /// 对话详情 beside the chat.
-  const SessionDetailPage.panel({super.key, required this.sessionId})
+  const SessionDetailPage.panel({super.key, required this.sessionId, this.showPanelBar = true})
     : initialTab = null,
       mode = SessionDetailMode.panel;
 
@@ -108,6 +113,7 @@ class SessionDetailPage extends ConsumerStatefulWidget {
   /// Null: 轨迹 on a page; the shared tab in the sheet and the panel.
   final SessionTab? initialTab;
   final SessionDetailMode mode;
+  final bool showPanelBar;
 
   static Route<void> route(String sessionId, {SessionTab initialTab = SessionTab.trajectory}) =>
       MaterialPageRoute<void>(
@@ -161,7 +167,7 @@ class _SessionDetailPageState extends ConsumerState<SessionDetailPage> with Tick
         if (tab != SessionTab.plugins && (tab != SessionTab.subagents || delegated || initial == SessionTab.subagents))
           tab,
     ];
-    final plugins = !ref.read(sessionPluginPlanProvider(widget.sessionId)).isEmpty;
+    final plugins = !ref.read(_pluginPlan).isEmpty;
     _tabs = [..._baseTabs, if (plugins) SessionTab.plugins];
     _controller = TabController(
       length: _tabs.length,
@@ -178,6 +184,10 @@ class _SessionDetailPageState extends ConsumerState<SessionDetailPage> with Tick
     ref.read(sessionDetailTabProvider.notifier).select(_tabs[_controller.index]);
   }
 
+  ProviderListenable<SeatPlan> get _pluginPlan => _mode == SessionDetailMode.panel
+      ? embeddedSessionPluginPlanProvider(widget.sessionId)
+      : sessionPluginPlanProvider(widget.sessionId);
+
   /// 插件 comes and goes with the host's plugin tabs for the conversation;
   /// the tab on screen stays where it is.
   void _syncPluginsTab(bool plugins) {
@@ -191,7 +201,10 @@ class _SessionDetailPageState extends ConsumerState<SessionDetailPage> with Tick
       vsync: this,
       initialIndex: next.contains(current) ? next.indexOf(current) : 0,
     )..addListener(_onTab);
-    WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      old.dispose();
+      if (mounted && !next.contains(current)) _onTab();
+    });
   }
 
   @override
@@ -209,7 +222,14 @@ class _SessionDetailPageState extends ConsumerState<SessionDetailPage> with Tick
     }
   }
 
-  void _openTerminal() => Navigator.of(context).push(TerminalPage.route(widget.sessionId));
+  void _openTerminal() {
+    final dock = TerminalDockScope.maybeOf(context);
+    if (dock != null) {
+      dock.toggle();
+    } else {
+      Navigator.of(context).push(TerminalPage.route(widget.sessionId));
+    }
+  }
 
   /// The page's bar: ‹ back, the title once the hero is gone, the terminal.
   Widget _pageBar(BuildContext context, String title) => SizedBox(
@@ -300,7 +320,7 @@ class _SessionDetailPageState extends ConsumerState<SessionDetailPage> with Tick
         if (i >= 0 && i != _controller.index) _controller.animateTo(i);
       });
     }
-    _syncPluginsTab(!ref.watch(sessionPluginPlanProvider(widget.sessionId)).isEmpty);
+    _syncPluginsTab(!ref.watch(_pluginPlan).isEmpty);
     final theme = Theme.of(context);
     final surfaces = DshSurfaces.of(context);
     final padding = MediaQuery.paddingOf(context);
@@ -328,7 +348,7 @@ class _SessionDetailPageState extends ConsumerState<SessionDetailPage> with Tick
     final barTop = sheet ? 0.0 : padding.top + barHeight;
     final bar = switch (_mode) {
       SessionDetailMode.page => _pageBar(context, shownTitle),
-      SessionDetailMode.panel => _panelBar(context, barHeight),
+      SessionDetailMode.panel => widget.showPanelBar ? _panelBar(context, barHeight) : null,
       SessionDetailMode.sheet => null,
     };
 
@@ -418,7 +438,13 @@ class _SessionDetailPageState extends ConsumerState<SessionDetailPage> with Tick
           padding: EdgeInsets.symmetric(horizontal: gutter - 16 + column),
           child: TabBarView(
             controller: _controller,
-            children: [for (final tab in _tabs) ConversationPane.ofTab(tab).build(id)],
+            children: [
+              for (final tab in _tabs)
+                if (tab == SessionTab.plugins)
+                  SessionPluginsTab(sessionId: id, excludeIndependent: _mode == SessionDetailMode.panel)
+                else
+                  ConversationPane.ofTab(tab).build(id),
+            ],
           ),
         ),
       ),

@@ -1,0 +1,7 @@
+{
+  "workspaceSaveFailed": "Could not save the panel layout. Please try again.",
+  "pluginDisplayIndependent": "Show independently",
+  "pluginDisplayIndependentHint": "Move this plugin from the details’ Plugins page into its own workspace tab on wide screens.",
+  "pluginDisplaySaveFailed": "Could not save the plugin display preference. Please try again.",
+  "workspaceDragHint": "Drag tabs to reorder or split; on touchscreens, hold first"
+}

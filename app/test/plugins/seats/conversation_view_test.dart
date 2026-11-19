@@ -19,6 +19,7 @@ import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../chat/support/harness.dart' as chat;
 import '../../chat/support/run_info_fixture.dart';
@@ -62,7 +63,10 @@ Future<void> _pumpDetail(WidgetTester tester, {required List<Override> seats}) a
 }
 
 void main() {
-  setUp(openedWeb.clear);
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    openedWeb.clear();
+  });
 
   group('plan', () {
     test('a view is a page island in its conversation; the official views stay DSH Web\'s', () {

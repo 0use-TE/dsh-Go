@@ -18,6 +18,7 @@ class PluginSeat extends ConsumerWidget {
     this.package,
     this.cell,
     this.layout,
+    this.viewId,
   });
 
   final String slot;
@@ -31,12 +32,13 @@ class PluginSeat extends ConsumerWidget {
 
   /// Only this cell.
   final String? cell;
+  final String? viewId;
 
   /// Lays out the items; a stretched column by default.
   final Widget Function(BuildContext context, List<Widget> children)? layout;
 
   SeatRequest get request =>
-      SeatRequest(slot: slot, placement: placement, sessionId: sessionId, package: package, cell: cell);
+      SeatRequest(slot: slot, placement: placement, sessionId: sessionId, package: package, cell: cell, viewId: viewId);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -56,9 +58,9 @@ class PluginSeat extends ConsumerWidget {
 
     final children = <Widget>[];
     for (final item in items) {
-      final key = ValueKey([
-        item.mode.name, item.occupant.package, item.occupant.cell, ?item.configNamespace,
-      ].join('|'));
+      final key = ValueKey(
+        [item.mode.name, item.occupant.package, item.occupant.cell, ?item.configNamespace].join('|'),
+      );
       switch (item.mode) {
         case SeatMode.native:
           children.add(KeyedSubtree(key: key, child: item.adapter!.build(context, plan.seat, item.occupant)));

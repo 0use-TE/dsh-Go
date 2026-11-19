@@ -11,18 +11,20 @@ import 'package:xterm/xterm.dart';
 
 import '../../l10n/l10n.dart';
 import '../../state/terminal_state.dart';
+import '../../state/terminal_color_state.dart';
 import '../common/empty_view.dart';
 import '../common/field_paste.dart';
 import '../theme/app_icons.dart';
 import '../theme/theme.dart';
 import 'terminal_keyboard.dart';
 import 'terminal_keys.dart';
+import 'terminal_dock_scope.dart';
 import 'terminal_palette.dart';
 import '../common/brief_notice.dart';
 
 /// The card shell: the engine log card's dark surface (dark in both themes),
 /// with the dark theme inside so buttons and empty states read on it.
-class TerminalCardFrame extends StatelessWidget {
+class TerminalCardFrame extends ConsumerWidget {
   const TerminalCardFrame({super.key, required this.child});
 
   final Widget child;
@@ -36,10 +38,10 @@ class TerminalCardFrame extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final ambient = Theme.of(context);
-    final palette = TerminalPalette.of(context);
-    return Theme(
+    final palette = TerminalPalette.forAccent(DshSurfaces.of(context).accent, color: ref.watch(terminalColorProvider));
+    return TerminalPaletteScope(palette: palette, child: Theme(
       data: ambient.brightness == Brightness.dark ? ambient : _darkThemeFor(DshSurfaces.of(context).accent),
       child: DecoratedBox(
         decoration: ShapeDecoration(
@@ -54,7 +56,7 @@ class TerminalCardFrame extends StatelessWidget {
           child: Material(type: MaterialType.transparency, child: child),
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -86,12 +88,18 @@ class TerminalScreen extends ConsumerStatefulWidget {
     required this.tab,
     required this.focusNode,
     required this.modifiers,
+    this.onToggleDock,
+    this.onSelectTab,
+    this.showExtraKeys = true,
   });
 
   final String sessionId;
   final TerminalTab tab;
   final FocusNode focusNode;
   final TerminalModifiers modifiers;
+  final VoidCallback? onToggleDock;
+  final ValueChanged<int>? onSelectTab;
+  final bool showExtraKeys;
 
   /// Inner padding of the screen inside the card.
   static const padding = EdgeInsets.fromLTRB(12, 12, 12, 6);
@@ -182,6 +190,24 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
   /// Hardware keys: wait while the IME composes; sticky modifiers apply to
   /// the next printable key.
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    if (widget.onToggleDock != null &&
+        event.logicalKey == LogicalKeyboardKey.backquote &&
+        HardwareKeyboard.instance.isControlPressed &&
+        !HardwareKeyboard.instance.isAltPressed &&
+        !HardwareKeyboard.instance.isShiftPressed &&
+        !HardwareKeyboard.instance.isMetaPressed) {
+      if (event is KeyDownEvent) widget.onToggleDock!();
+      return KeyEventResult.handled;
+    }
+    if (widget.onSelectTab != null && HardwareKeyboard.instance.isControlPressed &&
+        !HardwareKeyboard.instance.isAltPressed && !HardwareKeyboard.instance.isShiftPressed &&
+        !HardwareKeyboard.instance.isMetaPressed) {
+      final index = terminalNumberKeys.indexOf(event.logicalKey);
+      if (index >= 0) {
+        if (event is KeyDownEvent) widget.onSelectTab!(index);
+        return KeyEventResult.handled;
+      }
+    }
     if (_keyboard.currentState?.composing ?? false) return KeyEventResult.skipRemainingHandlers;
     if (event is KeyUpEvent || !widget.modifiers.any) return KeyEventResult.ignored;
     final character = event.character;
@@ -273,7 +299,8 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
   Widget? _bottom() {
     final tab = _tab;
     return switch (tab.phase) {
-      TerminalPhase.live when tab.writable => ExtraKeysRow(modifiers: widget.modifiers, onKey: _onExtraKey),
+      TerminalPhase.live when tab.writable =>
+        widget.showExtraKeys ? ExtraKeysRow(modifiers: widget.modifiers, onKey: _onExtraKey) : null,
       TerminalPhase.live => TerminalStatusBar(
         label: appL10n.botsTerminalOtherDevice,
         actionLabel: appL10n.botsTerminalTakeOver,
@@ -385,7 +412,9 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
           child: Stack(
             key: _stack,
             children: [
-              Positioned.fill(child: blocked == null ? screen : Center(child: blocked)),
+              Positioned.fill(
+                child: blocked == null ? screen : Center(child: SingleChildScrollView(child: blocked)),
+              ),
               if (blocked == null)
                 ListenableBuilder(
                   listenable: _selection,

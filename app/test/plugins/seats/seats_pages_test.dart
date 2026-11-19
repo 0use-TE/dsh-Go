@@ -28,6 +28,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../chat/support/harness.dart' as chat;
 import '../../chat/support/run_info_fixture.dart';
@@ -123,6 +124,7 @@ void main() {
     chatClock = () => DateTime(2026, 10, 23, 15, 20);
   });
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     openedWeb.clear();
     // 对话详情's running time, fixed.
     runClock = () => runInfoTestDispatched.add(const Duration(milliseconds: 12300));

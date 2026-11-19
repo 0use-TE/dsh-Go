@@ -956,6 +956,12 @@ abstract final class Spots {
     title: (l) => l.hubQuickPanel,
     keywords: (l) => l.searchKwQuickPanel,
   );
+  static final terminalColor = SettingSpot(
+    'terminal-color',
+    page: SettingsPageId.interface,
+    title: (l) => l.terminalColorTitle,
+    keywords: (l) => '${l.terminalColorTitle} ${l.terminalColorBlue} ${l.terminalColorClassic}',
+  );
   static final tableTint = SettingSpot(
     'table-tint',
     page: SettingsPageId.interface,
@@ -1266,6 +1272,7 @@ final _rows = <SettingSpot>[
   Spots.chatSuggestions,
   Spots.quickPanel,
   Spots.tableTint,
+  Spots.terminalColor,
   Spots.webApp,
   Spots.openWeb,
   Spots.webPhoneLayout,

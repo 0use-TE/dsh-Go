@@ -15,6 +15,7 @@ import '../../state/engine_settings_state.dart';
 import '../../state/quick_panel_state.dart';
 import '../../state/settings_state.dart';
 import '../../state/table_tint_state.dart';
+import '../../state/terminal_color_state.dart';
 import '../../state/ui_mode_state.dart';
 import '../engine_settings/namespace_copy.dart';
 import '../modes/mode_switch.dart';
@@ -49,6 +50,7 @@ class InterfacePage extends ConsumerWidget {
     final mode = ref.watch(uiModeProvider.select((s) => s.mode));
     final settings = ref.watch(settingsProvider);
     final tableTint = ref.watch(tableTintProvider);
+    final terminalColor = ref.watch(terminalColorProvider);
     final engine = ref.watch(engineSettingsProvider).value;
     final quickPanel = ref.watch(quickPanelProvider);
     final startup = ref.watch(appModeProvider.select((s) => s.startup));
@@ -186,6 +188,30 @@ class InterfacePage extends ConsumerWidget {
                   onTap: () => unawaited(ref.read(tableTintProvider.notifier).set(tint)),
                 ),
               ),
+          ],
+        ),
+        SettingsSection(
+          title: l10n.botsTerminal,
+          spot: Spots.terminalColor,
+          children: [
+            SettingsSegmentTile<TerminalColor>(
+              key: const ValueKey('terminal-color-setting'),
+              title: l10n.terminalColorTitle,
+              segments: [
+                PillSegment(TerminalColor.blue, l10n.terminalColorBlue),
+                PillSegment(TerminalColor.classic, l10n.terminalColorClassic),
+              ],
+              selected: terminalColor,
+              onChanged: (color) async {
+                try {
+                  await ref.read(terminalColorProvider.notifier).set(color);
+                } catch (_) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.terminalColorSaveFailed)));
+                  }
+                }
+              },
+            ),
           ],
         ),
         // The host's own: only once it has said what it keeps.

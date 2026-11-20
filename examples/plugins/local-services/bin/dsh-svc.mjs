@@ -5,25 +5,29 @@ import { call } from '../lib/rpc.js'
 
 export const HELP = `dsh-svc — registered services in the current DSH host
 
-  start NAME [--cwd DIR] [--url http://127.0.0.1:PORT] [--autostart] [--session ID] -- PROGRAM [ARGS...]
+  start NAME [--cwd DIR] [--url http://127.0.0.1:PORT] [--listen tcp://HOST:PORT] [--autostart] [--session ID] -- PROGRAM [ARGS...]
   start NAME                         Start an existing service
   register NAME --cwd DIR -- PROGRAM [ARGS...]
   list                               Show actual process and HTTP states
   stop NAME | restart NAME
   logs NAME [--bytes 8000] [--follow]
   autostart NAME on|off               Start on the next engine/plugin load
+  listen NAME ADDRESS [ADDRESS...]    Record TCP/UDP listeners without restarting
+  listen NAME --clear                Clear recorded listener addresses
   remove NAME                        Remove a stopped registration and its logs
 
 Always use foreground commands. Do not add nohup, &, or a daemon flag.
 Changes use the running plugin; run this command inside the DSH environment.
 Output is JSON, except logs. Arguments after -- are passed unchanged, without a shell.
+--listen can be repeated, accepts tcp:// or udp://, and records configuration only.
+--url is for local HTTP readiness checks, not SSH, Redis or other non-HTTP services.
 `
 
 export function parse(args, cwd = process.cwd()) {
   const [op, ...rest] = args
   if (!op || ['help', '--help', '-h'].includes(op)) return { help: true }
   if (op === 'list' && rest.length === 0) return { op }
-  if (!['start', 'register', 'stop', 'restart', 'logs', 'autostart', 'remove'].includes(op)) throw new ServiceError('INVALID_ARGUMENT', '不支持的命令，请运行 dsh-svc --help。')
+  if (!['start', 'register', 'stop', 'restart', 'logs', 'autostart', 'listen', 'remove'].includes(op)) throw new ServiceError('INVALID_ARGUMENT', '不支持的命令，请运行 dsh-svc --help。')
   const name = rest.shift()
   if (!name || name.startsWith('-')) throw new ServiceError('INVALID_ARGUMENT', '请提供服务名称。')
   const request = { op, name }
@@ -31,11 +35,16 @@ export function parse(args, cwd = process.cwd()) {
     if (rest.length !== 1 || !['on', 'off'].includes(rest[0])) throw new ServiceError('INVALID_ARGUMENT', '用法：autostart NAME on|off')
     return { ...request, enabled: rest[0] === 'on' }
   }
+  if (op === 'listen') {
+    if (!rest.length || rest.some(value => value.startsWith('-')) && !(rest.length === 1 && rest[0] === '--clear')) throw new ServiceError('INVALID_ARGUMENT', '用法：listen NAME ADDRESS... 或 listen NAME --clear')
+    return { ...request, listen: rest[0] === '--clear' ? [] : rest }
+  }
   while (rest.length) {
     const option = rest.shift()
     if (option === '--' && ['start', 'register'].includes(op)) { request.argv = rest.splice(0); request.cwd ??= cwd; break }
     if (option === '--autostart' && ['start', 'register'].includes(op)) { request.autoStart = true; continue }
     if (option === '--follow' && op === 'logs') { request.follow = true; continue }
+    if (option === '--listen' && ['start', 'register'].includes(op) && rest.length) { (request.listen ??= []).push(rest.shift()); continue }
     const key = { '--cwd': 'cwd', '--url': 'url', '--session': 'sessionId', '--bytes': 'bytes' }[option]
     const permitted = op === 'logs' ? key === 'bytes' : ['start', 'register'].includes(op) && ['cwd', 'url', 'sessionId'].includes(key)
     if (!key || !permitted || !rest.length) throw new ServiceError('INVALID_ARGUMENT', `参数无效：${option}`)
@@ -43,7 +52,7 @@ export function parse(args, cwd = process.cwd()) {
   }
   if (request.argv && request.argv.length === 0) throw new ServiceError('INVALID_ARGUMENT', '-- 后面必须有启动程序。')
   if (op === 'register' && !request.argv) throw new ServiceError('INVALID_ARGUMENT', 'register 必须提供启动程序。')
-  if (op === 'start' && !request.argv && ['cwd', 'url', 'sessionId', 'autoStart'].some(key => key in request)) throw new ServiceError('INVALID_ARGUMENT', '修改配置时请提供 -- PROGRAM ARGS；运行中的服务须先停止。')
+  if (op === 'start' && !request.argv && ['cwd', 'url', 'sessionId', 'autoStart', 'listen'].some(key => key in request)) throw new ServiceError('INVALID_ARGUMENT', '修改配置时请提供 -- PROGRAM ARGS；仅更新监听地址可使用 listen NAME ADDRESS。')
   if (request.bytes !== undefined && (!/^\d+$/.test(request.bytes) || Number(request.bytes) < 1 || Number(request.bytes) > 32000)) throw new ServiceError('INVALID_ARGUMENT', '--bytes 范围为 1–32000。')
   return request
 }

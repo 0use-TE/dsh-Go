@@ -106,6 +106,8 @@ test('bulk actions report individual failures and stop managed processes', async
 test('Web prompt, validation and disposal preserve the existing service contract', async t => {
   const { request, manager, dir, close } = await hostFor(t)
   assert.match((await request('prompt?lang=en')).data.prompt, /engine\/plugin load/)
+  assert.match((await request('prompt?lang=en')).data.prompt, /--listen tcp:\/\//)
+  assert.match((await request('prompt?lang=zh')).data.prompt, /SSH、Redis/)
   assert.match((await request('prompt?lang=zh')).data.prompt, /随引擎/)
   assert.match(agentPrompt("/tmp/it's $(bad)/cli"), /'\/tmp\/it'"'"'s \$\(bad\)\/cli'/)
   for (const body of ['{', 'null', '[]', ' '.repeat(4097), { op: 'register' }]) {

@@ -18,6 +18,7 @@
 - 界面使用 DSH 的语言服务，支持中文和英文并随宿主设置即时切换。正文和服务名为 16px，辅助信息为 14px，工具栏按钮为 40px，图标周围留 10px 内边距；列表内容左右留白，悬停底色与分隔线之间留缝。
 - 图标和列表使用宿主的柔和悬停、按压底色；键盘聚焦有独立提示。详情导航采用胶囊选中效果，支持减少动态效果设置。
 - 配置了 Web 地址的服务在列表显示简短的主机与端口，例如 `127.0.0.1:3000`。这是登记的访问地址，不是扫描得出的监听地址；没有配置地址的服务不显示该项。
+- 非 HTTP 服务用 `--listen tcp://0.0.0.0:2222`、`--listen udp://0.0.0.0:5353` 登记地址，可重复。列表优先显示这些地址，UDP 带协议标记；没有监听记录时回退显示 Web 地址。所有地址都是配置记录，不证明当前实际占用了该端口。
 
 ## 安装
 
@@ -58,11 +59,15 @@ node "$P/bin/dsh-svc.mjs" start demo
 node "$P/bin/dsh-svc.mjs" restart demo
 node "$P/bin/dsh-svc.mjs" logs demo --follow
 node "$P/bin/dsh-svc.mjs" autostart demo off
+node "$P/bin/dsh-svc.mjs" listen sshd tcp://0.0.0.0:2222
+node "$P/bin/dsh-svc.mjs" listen sshd --clear
 node "$P/bin/dsh-svc.mjs" stop demo
 node "$P/bin/dsh-svc.mjs" remove demo
 ```
 
 只保存不启动用 `register NAME --cwd DIR [--url URL] [--autostart] -- PROGRAM ARGS`。修改配置须先停止，再执行 `register` 或完整的 `start` 命令。重复启动同一服务不会重复创建进程；运行中修改命令会报错。除了日志和帮助外，CLI 输出 JSON；失败退出码为 1，并带 `code` 与 `message`。超时或断线后用 `list` 核对实际状态。
+
+`start` 和 `register` 均接受重复的 `--listen`。只更新监听地址时，用 `listen NAME ADDRESS...`，不会改变命令、HTTP 检测、自启或运行中的 PID。省略协议按 TCP 处理，IPv6 地址加方括号；例如 `udp://[::]:5353`。旧的服务记录继续兼容，未登记的地址留空。
 
 ## 自启和生命周期
 

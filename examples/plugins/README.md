@@ -13,7 +13,7 @@
 | [`dsh-go-example-toolbox`](dsh-go-example-toolbox/) | 较新的位置：加号面板工具、对话操作、回合尾注、插件详情页面板、弹层面板 | 要 |
 | [`dsh-go-example-overlay`](dsh-go-example-overlay/) | 网页接缝：显式启用的可拖动 / 点击浮层 + 侧栏底部、设置页签、详情分区三种单包入口；无额外依赖、无构建链 | App 内接缝要；网页版不要求 |
 | [`local-services`](local-services/) | 登记服务的 Web 面板 + CLI：启停开关、批量操作、日志和随引擎加载自启；Linux / Android PRoot | App 内接缝要；网页版不要求 |
-| [`system-monitor`](system-monitor/) | Web 系统监控：CPU、内存、存储、可见进程及 TCP／UDP 端口；明确区分实际监听和登记地址 | App 内接缝要；网页版不要求 |
+| [`system-monitor`](system-monitor/) | Web 资源监控：CPU、内存、存储和进程；支持排序，简洁界面 | App 内接缝要；网页版不要求 |
 
 安装：`dsh plugin --profile web add /绝对路径/<插件目录>`。端到端：`e2e/host-e2e.sh`（真 DSH + 桥接，按用户的方式安装三个示例）。MIT © DSH-TUI (ccch1mneyyy)。
 
@@ -30,6 +30,6 @@
 | [`dsh-go-example-toolbox`](dsh-go-example-toolbox/) | Newer places: plus panel tools, chat actions, turn notes, a panel on the plugin page, a panel as a sheet | Yes |
 | [`dsh-go-example-overlay`](dsh-go-example-overlay/) | Web seams: opt-in draggable / tappable overlay + three single-package entries (sidebar footer, settings tab, detail section); no extra dependencies or build chain | For app seams; not required in DSH Web |
 | [`local-services`](local-services/) | Registered-service Web panel + CLI: switches, bulk actions, logs and engine-load autostart; Linux / Android PRoot | For app seams; not required in DSH Web |
-| [`system-monitor`](system-monitor/) | Web system monitor: CPU, memory, storage, visible processes and TCP / UDP sockets; detected listeners and registered addresses are distinct | For app seams; not required in DSH Web |
+| [`system-monitor`](system-monitor/) | Web resource monitor: CPU, memory, storage and sortable processes in a compact interface | For app seams; not required in DSH Web |
 
 Install: `dsh plugin --profile web add /absolute/path/to/<plugin>`. End to end: `e2e/host-e2e.sh` (real DSH + bridge, installs the three the way a person does). MIT © DSH-TUI (ccch1mneyyy).

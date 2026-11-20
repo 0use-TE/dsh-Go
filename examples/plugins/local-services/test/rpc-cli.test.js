@@ -19,6 +19,10 @@ test('CLI preserves program arguments and rejects ambiguous configuration change
   assert.equal(request.cwd, '/workspace')
   assert.equal(request.autoStart, true)
   assert.deepEqual(parse(['autostart', 'demo', 'off']), { op: 'autostart', name: 'demo', enabled: false })
+  assert.deepEqual(parse(['listen', 'demo', '0.0.0.0:2222', 'udp://127.0.0.1:5353']), { op: 'listen', name: 'demo', listen: ['0.0.0.0:2222', 'udp://127.0.0.1:5353'] })
+  assert.deepEqual(parse(['listen', 'demo', '--clear']), { op: 'listen', name: 'demo', listen: [] })
+  assert.deepEqual(parse(['start', 'demo', '--listen', '0.0.0.0:22', '--listen', 'udp://[::]:53', '--', 'sshd', '-D']).listen, ['0.0.0.0:22', 'udp://[::]:53'])
+  for (const args of [['listen', 'demo'], ['listen', 'demo', '--clear', '0.0.0.0:22'], ['start', 'demo', '--listen', '0.0.0.0:22']]) assert.throws(() => parse(args), { code: 'INVALID_ARGUMENT' })
   for (const args of [['start', 'demo', '--cwd', '/tmp'], ['register', 'demo'], ['logs', 'demo', '--bytes', '-1'], ['stop', 'demo', '--autostart'], ['start', 'demo', '--']]) {
     assert.throws(() => parse(args), { code: 'INVALID_ARGUMENT' })
   }
@@ -37,6 +41,10 @@ test('CLI and panel manager use the same registry and lifecycle; unavailable man
   assert.ok(started.pid)
   assert.equal((await manager.list())[0].pid, started.pid)
   assert.equal(JSON.parse((await run('list')).stdout)[0].autoStart, true)
+  const updated = JSON.parse((await run('listen', 'demo', '0.0.0.0:2222')).stdout)
+  assert.equal(updated.pid, started.pid)
+  assert.deepEqual(JSON.parse((await run('list')).stdout)[0].listen, ['tcp://0.0.0.0:2222'])
+  assert.deepEqual(JSON.parse((await run('listen', 'demo', '--clear')).stdout).listen, [])
   await eventually(() => manager.logs('demo'), log => log.text.includes('中文'))
   assert.match((await run('logs', 'demo')).stdout, /中文/)
   await run('stop', 'demo')

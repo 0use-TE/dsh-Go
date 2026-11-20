@@ -14,7 +14,6 @@ export function handler(monitor, rejection) {
     const path = new URL(req.url, 'http://localhost').pathname
     try {
       if (path === API + '/resources') return send(res, 200, await monitor.resources())
-      if (path === API + '/ports') return send(res, 200, await monitor.ports())
       return send(res, 404, { error: { code: 'NOT_FOUND' } })
     } catch (error) { return send(res, 500, { error: { code: error.code ?? 'MONITOR_FAILED', message: 'Unable to read host metrics.' } }) }
   }

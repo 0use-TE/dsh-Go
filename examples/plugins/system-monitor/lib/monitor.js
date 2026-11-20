@@ -1,5 +1,5 @@
-import { readFile, readdir, readlink, statfs } from 'node:fs/promises'
-import { homedir, availableParallelism, endianness } from 'node:os'
+import { readFile, readdir, statfs } from 'node:fs/promises'
+import { homedir, availableParallelism } from 'node:os'
 import { join } from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -26,43 +26,23 @@ export function parseProcess(text, status) {
     state: fields[0], ppid: Number(fields[1]), ticks: Number(fields[11]) + Number(fields[12]), start: fields[19],
     memory: Number(status.match(/^VmRSS:\s+(\d+)\s+kB/m)?.[1] ?? 0) * 1024 }
 }
-export function parseEndpoint(raw, ipv6, byteOrder = endianness()) {
-  const [hex, port] = raw.split(':')
-  const decode = value => {
-    const bytes = Buffer.from(value, 'hex')
-    return byteOrder === 'LE' ? bytes.reverse() : bytes
-  }
-  const address = ipv6
-    ? new URL('http://[' + hex.match(/.{8}/g).map(word => decode(word).toString('hex').match(/.{4}/g).join(':')).join(':') + ']').hostname.slice(1, -1)
-    : [...decode(hex)].join('.')
-  return { address, port: parseInt(port, 16) }
-}
-export function parseSockets(text, protocol, ipv6 = false) {
-  return text.trim().split('\n').slice(1).flatMap(line => {
-    const fields = line.trim().split(/\s+/)
-    if (protocol === 'TCP' && fields[3] !== '0A') return []
-    const local = parseEndpoint(fields[1], ipv6)
-    if (local.port === 0) return []
-    return [{ protocol, ...local, inode: fields[9], owners: [] }]
-  })
-}
 export class SystemMonitor {
-  constructor({ proc = '/proc', diskPath = homedir(), registry = join(process.env.DSH_SVC_HOME || join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'dsh-go', 'services'), 'services.json'), clock = () => performance.now(), hz } = {}) {
-    Object.assign(this, { proc, diskPath, registry, clock, hz })
+  constructor({ proc = '/proc', diskPath = homedir(), clock = () => performance.now(), hz } = {}) {
+    Object.assign(this, { proc, diskPath, clock, hz })
     this.previousProcesses = new Map()
-    this.cache = new Map()
+    this.cache = null
   }
   async initialize() {
     if (this.hz !== undefined) return
     try { this.hz = Number((await exec('getconf', ['CLK_TCK'], { timeout: 2000 })).stdout.trim()) }
     catch (error) { this.hz = null; this.hzError = codeOf(error) }
   }
-  cached(key, duration, read) {
-    const old = this.cache.get(key)
-    if (old && (old.pending || this.clock() - old.time < duration)) return old.value
+  resources() {
+    const old = this.cache
+    if (old && (old.pending || this.clock() - old.time < 1000)) return old.value
     const item = { pending: true, time: this.clock() }
-    item.value = read().then(value => { item.pending = false; item.time = this.clock(); return value }, error => { this.cache.delete(key); throw error })
-    this.cache.set(key, item)
+    item.value = this.readResources().then(value => { item.pending = false; item.time = this.clock(); return value }, error => { this.cache = null; throw error })
+    this.cache = item
     return item.value
   }
   async processes() {
@@ -80,7 +60,6 @@ export class SystemMonitor {
     }))
     return { rows, hidden }
   }
-  resources() { return this.cached('resources', 1000, () => this.readResources()) }
   async readResources() {
     const issues = []
     const read = async (area, task) => {
@@ -107,46 +86,5 @@ export class SystemMonitor {
     if (this.hzError) issues.push({ area: 'processCpu', code: this.hzError })
     return { sampledAt: new Date().toISOString(), cores: availableParallelism(), cpu: cpuPercent, processCpu, memory, disk,
       processes: rows.map(({ ticks, start, ...row }) => row), hidden: processes?.hidden ?? 0, issues }
-  }
-  ports() { return this.cached('ports', 5000, () => this.readPorts()) }
-  async readPorts() {
-    const issues = [], sockets = []
-    let tables = 0
-    for (const [file, protocol, ipv6] of [['tcp', 'TCP', false], ['tcp6', 'TCP', true], ['udp', 'UDP', false], ['udp6', 'UDP', true]]) {
-      try { sockets.push(...parseSockets(await readFile(join(this.proc, 'net', file), 'utf8'), protocol, ipv6)); tables++ }
-      catch (error) { issues.push({ area: file, code: codeOf(error) }) }
-    }
-    let hidden = 0
-    if (sockets.length) {
-      const { rows, hidden: unreadable } = await this.processes()
-      hidden += unreadable
-      const inodes = new Map()
-      for (const socket of sockets) {
-        if (!inodes.has(socket.inode)) inodes.set(socket.inode, [])
-        inodes.get(socket.inode).push(socket)
-      }
-      for (const row of rows) {
-        try {
-          const path = join(this.proc, String(row.pid), 'fd')
-          const owned = new Set()
-          for (const fd of await readdir(path)) {
-            try { const inode = (await readlink(join(path, fd))).match(/^socket:\[(\d+)\]$/)?.[1]; if (inode && inodes.has(inode)) owned.add(inode) }
-            catch (error) { if (!transient.has(error.code)) throw error }
-          }
-          for (const inode of owned) for (const socket of inodes.get(inode)) socket.owners.push({ pid: row.pid, name: row.name })
-        } catch (error) { if (!transient.has(error.code)) throw error; if (error.code === 'EACCES' || error.code === 'EPERM') hidden++ }
-      }
-    }
-    let registered = [], registryIssue = null
-    try {
-      const definitions = JSON.parse(await readFile(this.registry, 'utf8'))
-      registered = definitions.filter(service => service.url).map(service => {
-        const url = new URL(service.url)
-        return { name: service.name, address: url.hostname, port: Number(url.port || (url.protocol === 'https:' ? 443 : 80)) }
-      })
-    } catch (error) { if (error.code !== 'ENOENT') registryIssue = codeOf(error) }
-    sockets.sort((a, b) => a.port - b.port || a.protocol.localeCompare(b.protocol) || a.address.localeCompare(b.address))
-    return { sampledAt: new Date().toISOString(), available: tables > 0, partial: tables > 0 && issues.some(issue => issue.code !== 'ENOENT'),
-      sockets: sockets.map(({ inode, ...socket }) => socket), hidden, registered, registryIssue, issues }
   }
 }

@@ -18,6 +18,8 @@ A Web service panel and shared command interface for DSH Ha / dsh-Go. Manages ex
 - Uses DSH's locale service for Chinese and English, including live language changes. Body text and service names are 16px, secondary information 14px, and toolbar buttons 40px with 10px icon padding. Rows have horizontal content padding and a gap between hover backgrounds and separators.
 - Icons and rows use the host's soft hover and pressed backgrounds, with a separate keyboard focus indicator. Details use capsule tabs and respect reduced motion preferences.
 - Services with a configured Web URL show a compact host and port, such as `127.0.0.1:3000`. This is the registered access URL, not a detected bind address. Services without a URL omit it.
+- Non-HTTP services can register repeatable `--listen tcp://0.0.0.0:2222` or `--listen udp://0.0.0.0:5353` addresses. The list prefers these, marking UDP explicitly, and falls back to the Web URL when none are registered. Addresses are configuration metadata, not proof of actual socket ownership.
+- Both `start` and `register` accept `--listen`. Use `listen NAME ADDRESS...` to update only these records without changing the running PID, command, HTTP checks or autostart; use `listen NAME --clear` to clear them. Bare `HOST:PORT` means TCP, and IPv6 hosts require brackets. Old registrations remain compatible with no listener records.
 
 ## Install
 
@@ -58,6 +60,8 @@ node "$P/bin/dsh-svc.mjs" start demo
 node "$P/bin/dsh-svc.mjs" restart demo
 node "$P/bin/dsh-svc.mjs" logs demo --follow
 node "$P/bin/dsh-svc.mjs" autostart demo off
+node "$P/bin/dsh-svc.mjs" listen sshd tcp://0.0.0.0:2222
+node "$P/bin/dsh-svc.mjs" listen sshd --clear
 node "$P/bin/dsh-svc.mjs" stop demo
 node "$P/bin/dsh-svc.mjs" remove demo
 ```

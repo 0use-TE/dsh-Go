@@ -20,8 +20,9 @@ window.__ModuleLoader__.load({
     const active = service => ['running', 'starting', 'stopping'].includes(service.status)
     const endpoint = raw => {
       const url = new URL(raw)
-      return url.hostname + ':' + (url.port || (url.protocol === 'https:' ? '443' : '80'))
+      return (url.protocol === 'udp:' ? 'UDP ' : '') + url.hostname + ':' + (url.port || (url.protocol === 'https:' ? '443' : '80'))
     }
+    const addresses = service => service.listen?.length ? service.listen : service.url ? [service.url] : []
     async function request(path, body) {
       const response = await fetch(API + path, { credentials: 'same-origin', ...(body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}) })
       const data = await response.json()
@@ -182,7 +183,7 @@ window.__ModuleLoader__.load({
           title: service.autoStart ? t('关闭自启', 'Disable autostart') : t('开启自启', 'Enable autostart'),
           onClick: () => action('autostart', service, !service.autoStart) },
           icon(service.autoStart ? 'auto' : 'play'), service.autoStart ? t('自启', 'Auto') : t('手动', 'Manual')),
-          service.url ? h('span', { className: 'ls-endpoint', title: t('配置的访问地址：', 'Configured URL: ') + service.url }, endpoint(service.url)) : null),
+          addresses(service).length ? h('span', { className: 'ls-endpoint', title: (service.listen?.length ? t('登记的监听地址：', 'Registered listeners: ') : t('配置的访问地址：', 'Configured URL: ')) + addresses(service).join(', ') }, addresses(service).map(endpoint).join(', ')) : null),
         toggle(service)))
       let details
       if (selected) {
@@ -202,6 +203,7 @@ window.__ModuleLoader__.load({
                 h('dl', null,
                   field(t('状态', 'Status'), state),
                   field(t('进程 ID', 'Process ID'), selected.pid ?? '—'),
+                  selected.listen?.length ? field(t('监听地址', 'Listen addresses'), selected.listen.join(', ')) : null,
                   selected.url ? field(t('访问地址', 'URL'), h('span', null, selected.url,
                     button('copy', t('复制地址', 'Copy URL'), async () => { try { await copy(selected.url) } catch (reason) { setError(reason.message) } }))) : null,
                   field(t('工作目录', 'Working directory'), selected.cwd),

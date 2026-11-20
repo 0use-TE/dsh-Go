@@ -44,6 +44,28 @@ test('actual exit codes and failed spawn remain visible; failed services can be 
   assert.equal((await manager.list()).find(v => v.name === 'bad').status, 'running')
 })
 
+test('TCP/UDP listeners are metadata, persist, and can change without restarting a running service', async t => {
+  const { manager, dir } = await setup(t)
+  const started = await manager.execute({ op: 'start', name: 'non-http', cwd: dir, argv: argv('idle'), listen: ['0.0.0.0:2222', 'udp://[::]:5353'] })
+  assert.deepEqual(started.listen, ['tcp://0.0.0.0:2222', 'udp://[::]:5353'])
+  assert.equal(started.url, '')
+  const changed = await manager.execute({ op: 'listen', name: 'non-http', listen: ['tcp://127.0.0.1:6379'] })
+  assert.equal(changed.pid, started.pid)
+  assert.equal(changed.startedAt, started.startedAt)
+  assert.equal(changed.status, 'running')
+  assert.deepEqual(JSON.parse(await readFile(join(dir, 'services.json'), 'utf8'))[0].listen, ['tcp://127.0.0.1:6379'])
+  for (const listen of [null, '127.0.0.1:22', ['http://127.0.0.1:22'], ['tcp://user:secret@localhost:22'], ['tcp://127.0.0.1:0'], ['tcp://127.0.0.1:65536'], ['udp://localhost:5353/path']]) {
+    await assert.rejects(manager.execute({ op: 'listen', name: 'non-http', listen }), { code: 'INVALID_LISTEN' })
+  }
+  const save = manager.save
+  manager.save = async () => { throw Object.assign(Error('write failed'), { code: 'EIO' }) }
+  await assert.rejects(manager.execute({ op: 'listen', name: 'non-http', listen: [] }), { code: 'EIO' })
+  assert.deepEqual(manager.get('non-http').listen, ['tcp://127.0.0.1:6379'])
+  manager.save = save
+  assert.equal((await manager.execute({ op: 'listen', name: 'non-http', listen: [] })).pid, started.pid)
+  assert.equal(await alive(started.pid), true)
+})
+
 test('stop reaps the command and its SIGTERM-ignoring descendants', async t => {
   const { dir, manager } = await setup(t)
   const service = await manager.execute({ op: 'start', name: 'tree', cwd: dir, argv: argv('tree') })

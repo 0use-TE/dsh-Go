@@ -7,7 +7,7 @@ import { handler, API } from '../lib/index.js'
 
 test('read-only API checks host authentication before collecting any data', async t => {
   const calls = []
-  const monitor = { resources: async () => { calls.push('resources'); return { cpu: null } }, ports: async () => { calls.push('ports'); return { available: false } } }
+  const monitor = { resources: async () => { calls.push('resources'); return { cpu: null } } }
   const server = createServer(handler(monitor, req => req.headers.cookie === 'session=test' ? undefined : 401))
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   t.after(() => new Promise(resolve => server.close(resolve)))
@@ -15,7 +15,7 @@ test('read-only API checks host authentication before collecting any data', asyn
   assert.equal((await request('resources', '')).status, 401)
   assert.deepEqual(calls, [])
   assert.deepEqual(await (await request('resources')).json(), { cpu: null })
-  assert.equal((await request('ports')).status, 200)
+  assert.equal((await request('ports')).status, 404)
   assert.equal((await request('ports', 'session=test', 'POST')).status, 405)
   assert.equal((await request('missing')).status, 404)
   monitor.resources = async () => { throw Object.assign(Error('private path must not be sent'), { code: 'EIO' }) }

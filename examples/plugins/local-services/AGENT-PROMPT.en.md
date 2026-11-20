@@ -12,3 +12,4 @@ Register and start long-running web or background services using the local servi
 6. Report failures honestly. After a timeout or disconnect, check `list` before acting again. Do not infer plugin-managed service states from systemd.
 7. Arguments and URLs are persisted; output is logged. Keep secrets in the program's private configuration files, out of arguments, URLs and logs.
 8. Temporary builds, tests and one-shot commands can use the normal terminal. Do not register every short-lived command as a service.
+9. Record configured listener addresses with repeatable `--listen tcp://HOST:PORT` or `--listen udp://HOST:PORT`, including non-HTTP services such as SSH and Redis. For existing services, `listen NAME ADDRESS...` updates metadata and `listen NAME --clear` clears it, without restarting. Use `--url` only for local HTTP readiness; never invent HTTP URLs for non-HTTP services.

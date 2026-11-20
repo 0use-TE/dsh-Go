@@ -24,6 +24,18 @@ function webAddress(raw) {
   }
   return url.href
 }
+function listenAddresses(values) {
+  if (!Array.isArray(values)) fail('INVALID_LISTEN', '监听地址须为数组。')
+  return values.map(raw => {
+    let url
+    try { if (typeof raw !== 'string') throw Error(); url = new URL(raw.includes('://') ? raw : 'tcp://' + raw) }
+    catch { fail('INVALID_LISTEN', '监听地址格式为 tcp://主机:端口 或 udp://主机:端口。') }
+    if (!['tcp:', 'udp:'].includes(url.protocol) || !url.hostname || !url.port || Number(url.port) < 1 || url.username || url.password || url.search || url.hash || !['', '/'].includes(url.pathname)) {
+      fail('INVALID_LISTEN', '请提供不含凭据或路径的 TCP／UDP 主机与端口。')
+    }
+    return url.protocol + '//' + url.host
+  })
+}
 function definition(input, old) {
   const name = serviceName(input.name)
   const argv = input.argv ?? old?.argv
@@ -32,7 +44,7 @@ function definition(input, old) {
   if (typeof cwd !== 'string' || !isAbsolute(cwd)) fail('INVALID_CWD', '工作目录必须是绝对路径。')
   if (input.autoStart !== undefined && typeof input.autoStart !== 'boolean') fail('INVALID_AUTOSTART', '自启选项必须是布尔值。')
   if (input.sessionId !== undefined && (typeof input.sessionId !== 'string' || input.sessionId.length > 256)) fail('INVALID_SESSION', '对话标识无效。')
-  return { name, argv, cwd, url: webAddress(input.url ?? old?.url), autoStart: input.autoStart ?? old?.autoStart ?? false,
+  return { name, argv, cwd, url: webAddress(input.url ?? old?.url), listen: listenAddresses(input.listen === undefined ? old?.listen ?? [] : input.listen), autoStart: input.autoStart ?? old?.autoStart ?? false,
     sessionId: input.sessionId ?? old?.sessionId ?? '', createdAt: old?.createdAt ?? new Date().toISOString() }
 }
 
@@ -194,6 +206,14 @@ export class ServiceManager extends EventEmitter {
           try { await this.save() } catch (error) { this.definitions.set(def.name, def); throw error }
           this.emit('change')
           return next
+        }
+        case 'listen': {
+          const def = this.get(request.name)
+          const next = { ...def, listen: listenAddresses(request.listen) }
+          this.definitions.set(def.name, next)
+          try { await this.save() } catch (error) { this.definitions.set(def.name, def); throw error }
+          this.emit('change')
+          return this.describe(next)
         }
         case 'remove': {
           const def = this.get(request.name)

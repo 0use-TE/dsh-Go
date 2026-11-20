@@ -129,6 +129,92 @@ void main() {
     expect(fake.created.map((c) => c['id']).toSet(), {tab.id}, reason: 'the same id is retried');
   });
 
+  test('split PTYs retain their sides, replace only the active pane, and merge without closing', () async {
+    final workspace = await open(FakeTerminalBackend(terminals: [infoJson('a'), infoJson('b')]));
+    await workspace.splitTerminal('a');
+    await _settle();
+    final right = read().selectedId!;
+    expect(read().splitIds, ['a', right]);
+    expect(read().visibleTabs.map((tab) => tab.id), ['a', right]);
+    expect(backend.host.keys, containsAll(['a', 'b', right]));
+    expect(backend.attaches.map((attach) => attach.id), ['a', right]);
+    workspace.select('a');
+    expect(read().splitIds, ['a', right]);
+    workspace.select('b');
+    await _settle();
+    expect(read().splitIds, ['b', right]);
+    await workspace.splitTerminal('b');
+    expect(backend.created, hasLength(1), reason: 'only two panes are supported');
+    workspace.resizeSplit(.65);
+    workspace.unsplit();
+    expect(read().isSplit, isFalse);
+    expect(read().visibleTabs.single.id, 'b');
+    expect(read().splitFraction, .65);
+    expect(backend.calls.where((call) => call.startsWith('close:')), isEmpty);
+  });
+
+  test('creating or replacing a split terminal keeps the other pane and its process', () async {
+    final workspace = await open(FakeTerminalBackend(terminals: [infoJson('a')]));
+    await workspace.splitTerminal('a');
+    final right = read().selectedId!;
+    await workspace.newTerminal();
+    final next = read().selectedId!;
+    expect(read().splitIds, ['a', next]);
+    expect(backend.host, contains(right));
+    await workspace.newTerminal(replacing: 'a');
+    await _settle();
+    expect(read().splitIds, [read().selectedId, next]);
+    expect(read().visibleTabs, hasLength(2));
+    expect(backend.host, isNot(contains('a')));
+    expect(backend.host, contains(next));
+  });
+
+  test('closing a visible split pane expands its partner instead of a hidden tab', () async {
+    final workspace = await open(FakeTerminalBackend(terminals: [infoJson('a'), infoJson('hidden')]));
+    await workspace.splitTerminal('a');
+    final right = read().selectedId!;
+    workspace.closeTab('hidden');
+    expect(read().splitIds, ['a', right]);
+    workspace.select('a');
+    workspace.closeTab('a');
+    await _settle();
+    expect(read().isSplit, isFalse);
+    expect(read().selectedId, right);
+    expect(backend.host.keys, [right]);
+    await workspace.splitTerminal(right);
+    final second = read().selectedId!;
+    workspace.closeTab(second);
+    await _settle();
+    expect(read().selectedId, right);
+    expect(read().isSplit, isFalse);
+  });
+
+  test('split tabs remain in their group when focus moves, and closing selects within the group', () async {
+    final workspace = await open(FakeTerminalBackend(terminals: [infoJson('a'), infoJson('b')]));
+    await workspace.splitTerminal('a');
+    final right = read().selectedId!;
+    await workspace.newTerminal();
+    final rightNew = read().selectedId!;
+    workspace.select('b');
+    expect(read().splitIds, ['b', rightNew]);
+    workspace.select(right);
+    expect(read().splitIds, ['b', right]);
+    expect(read().tabsForPane(0).map((tab) => tab.id), ['a', 'b']);
+    expect(read().tabsForPane(1).map((tab) => tab.id), [right, rightNew]);
+    workspace.closeTab('b');
+    expect(read().splitIds, ['a', right]);
+    expect(read().selectedId, right, reason: 'closing a tab in the other pane keeps focus');
+    workspace.closeTab(right);
+    expect(read().splitIds, ['a', rightNew]);
+    expect(read().selectedId, rightNew);
+    workspace.closeTab('a');
+    await _settle();
+    expect(read().isSplit, isFalse);
+    expect(read().rightTabIds, isEmpty);
+    expect(read().selectedId, rightNew);
+    expect(read().tabsForPane(0).single.id, rightNew);
+  });
+
   test('exit ends the tab; 新建终端 replaces it in place and closes the old one', () async {
     final workspace = await open(
       FakeTerminalBackend(

@@ -24111,6 +24111,12 @@ class L10nZh extends L10n {
   String get tavernPackExportChanged => '导出的来源或选项变了，请重新预览';
 
   @override
+  String get terminalSplitRight => '向右分屏';
+
+  @override
+  String get terminalUnsplit => '取消分屏';
+
+  @override
   String get terminalDockHide => '隐藏终端（Ctrl + `）';
 
   @override

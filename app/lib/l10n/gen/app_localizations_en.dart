@@ -25400,6 +25400,12 @@ class L10nEn extends L10n {
   String get tavernPackExportChanged => 'The export\'s sources or options changed; preview again';
 
   @override
+  String get terminalSplitRight => 'Split right';
+
+  @override
+  String get terminalUnsplit => 'Unsplit';
+
+  @override
   String get terminalDockHide => 'Hide terminal (Ctrl + `)';
 
   @override

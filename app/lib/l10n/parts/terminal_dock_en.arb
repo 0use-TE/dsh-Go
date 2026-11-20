@@ -1,4 +1,6 @@
 {
+  "terminalSplitRight": "Split right",
+  "terminalUnsplit": "Unsplit",
   "terminalDockHide": "Hide terminal (Ctrl + `)",
   "terminalColorTitle": "Terminal colors",
   "terminalColorBlue": "Deep blue",

@@ -14524,6 +14524,8 @@
   "tavernPackCastUnproven": "确认不了这个角色是从这个包导入的",
   "tavernPackCastOtherVersion": "关联的角色来自这个包的另一个版本",
   "tavernPackExportChanged": "导出的来源或选项变了，请重新预览",
+  "terminalSplitRight": "向右分屏",
+  "terminalUnsplit": "取消分屏",
   "terminalDockHide": "隐藏终端（Ctrl + `）",
   "terminalColorTitle": "终端配色",
   "terminalColorBlue": "深蓝色",

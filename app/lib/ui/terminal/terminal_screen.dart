@@ -91,6 +91,7 @@ class TerminalScreen extends ConsumerStatefulWidget {
     required this.focusNode,
     required this.modifiers,
     this.showExtraKeys = true,
+    this.autofocus = true,
   });
 
   final String sessionId;
@@ -98,6 +99,7 @@ class TerminalScreen extends ConsumerStatefulWidget {
   final FocusNode focusNode;
   final TerminalModifiers modifiers;
   final bool showExtraKeys;
+  final bool autofocus;
 
   /// Inner padding of the screen inside the card.
   static const padding = EdgeInsets.fromLTRB(12, 12, 12, 6);
@@ -349,7 +351,7 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
       ),
       backgroundOpacity: 0,
       focusNode: widget.focusNode,
-      autofocus: canType,
+      autofocus: canType && widget.autofocus,
       hardwareKeyboardOnly: true,
       readOnly: !canType,
       keyboardAppearance: Brightness.dark,

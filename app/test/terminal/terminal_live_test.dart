@@ -71,6 +71,41 @@ void main() {
     await until(() => read().selected?.phase == TerminalPhase.live, 'bash reattached');
     expect(screen(), contains('中文-42'));
 
+    // Two independent host PTYs: each gets its own input, output and size.
+    await workspace().splitTerminal(bashId);
+    await until(() => read().selected?.phase == TerminalPhase.live, 'split terminal live');
+    final splitId = read().selected!.id;
+    expect(read().splitIds, [bashId, splitId]);
+    String screenOf(String id) => read().tabs
+        .firstWhere((tab) => tab.id == id)
+        .terminal
+        .buffer
+        .lines
+        .toList()
+        .map((line) => line.toString())
+        .join('\n');
+    workspace().resize(bashId, 48, 18);
+    workspace().resize(splitId, 36, 16);
+    workspace().send(bashId, 'printf "LEFT-%s\\n" 41; stty size\r');
+    workspace().send(splitId, 'printf "RIGHT-%s\\n" 42; stty size\r');
+    await until(() => screenOf(bashId).contains('LEFT-41') && screenOf(bashId).contains('18 48'), 'left split output');
+    await until(
+      () => screenOf(splitId).contains('RIGHT-42') && screenOf(splitId).contains('16 36'),
+      'right split output',
+    );
+    expect(screenOf(bashId), isNot(contains('RIGHT-42')));
+    expect(screenOf(splitId), isNot(contains('LEFT-41')));
+    await workspace().newTerminal(pane: 1);
+    await until(() => read().selected?.phase == TerminalPhase.live, 'second right-group terminal live');
+    final secondRight = read().selected!.id;
+    expect(read().splitIds, [bashId, secondRight]);
+    expect(read().tabsForPane(1).map((tab) => tab.id), [splitId, secondRight]);
+    workspace().closeTab(secondRight);
+    await until(() => read().isSplit && read().selectedId == splitId, 'right group restores its previous terminal');
+    workspace().closeTab(splitId);
+    await until(() => !read().isSplit && read().selectedId == bashId, 'remaining pane expanded');
+    expect(screen(), contains('LEFT-41'));
+
     read().selected!.terminal.textInput('exit 3\r');
     await until(() => read().selected?.phase == TerminalPhase.ended, 'exit');
     expect(read().selected!.exitCode, 3);

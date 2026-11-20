@@ -44222,6 +44222,18 @@ abstract class L10n {
   /// **'导出的来源或选项变了，请重新预览'**
   String get tavernPackExportChanged;
 
+  /// No description provided for @terminalSplitRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'向右分屏'**
+  String get terminalSplitRight;
+
+  /// No description provided for @terminalUnsplit.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消分屏'**
+  String get terminalUnsplit;
+
   /// No description provided for @terminalDockHide.
   ///
   /// In zh, this message translates to:

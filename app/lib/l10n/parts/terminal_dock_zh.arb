@@ -1,4 +1,6 @@
 {
+  "terminalSplitRight": "向右分屏",
+  "terminalUnsplit": "取消分屏",
   "terminalDockHide": "隐藏终端（Ctrl + `）",
   "terminalColorTitle": "终端配色",
   "terminalColorBlue": "深蓝色",

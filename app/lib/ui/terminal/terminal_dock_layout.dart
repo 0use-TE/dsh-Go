@@ -40,8 +40,9 @@ class TerminalDockLayout extends ConsumerStatefulWidget {
 
 class _TerminalDockLayoutState extends ConsumerState<TerminalDockLayout> {
   bool _shown = false;
-  // Retain the PTY and buffer after the terminal has first been opened.
-  bool _opened = false;
+  // Hold from the opening key event onward, including before the first frame.
+  // Closing the dock keeps PTYs/buffers; changing conversation/host releases it.
+  ProviderSubscription<TerminalWorkspaceState>? _terminalHold;
   double _fraction = .42;
   FocusNode? _previousFocus;
   final _bodyKey = GlobalKey();
@@ -56,6 +57,7 @@ class _TerminalDockLayoutState extends ConsumerState<TerminalDockLayout> {
   @override
   void dispose() {
     FocusManager.instance.removeEarlyKeyEventHandler(_shortcut);
+    _terminalHold?.close();
     super.dispose();
   }
 
@@ -65,21 +67,37 @@ class _TerminalDockLayoutState extends ConsumerState<TerminalDockLayout> {
       return KeyEventResult.ignored;
     }
     final keyboard = HardwareKeyboard.instance;
-    if (!keyboard.isControlPressed || keyboard.isAltPressed || keyboard.isShiftPressed || keyboard.isMetaPressed) {
+    final command = terminalCommandFor(event);
+    final index =
+        keyboard.isControlPressed && !keyboard.isShiftPressed && !keyboard.isAltPressed && !keyboard.isMetaPressed
+        ? terminalNumberKeys.indexOf(event.logicalKey)
+        : -1;
+    if (command == null && index < 0) return KeyEventResult.ignored;
+    final page = _terminalKey.currentState;
+    if ((command == TerminalCommand.close || command == TerminalCommand.split) && page?.hasInputFocus != true) {
       return KeyEventResult.ignored;
     }
-    final toggle =
-        event.logicalKey == LogicalKeyboardKey.backquote || event.physicalKey == PhysicalKeyboardKey.backquote;
-    final index = terminalNumberKeys.indexOf(event.logicalKey);
-    if (!toggle && index < 0) return KeyEventResult.ignored;
     if (event is KeyDownEvent) {
-      if (toggle) {
-        _toggle();
-      } else {
-        _selectTerminal(index);
+      switch (command) {
+        case TerminalCommand.toggle:
+          _toggle();
+        case TerminalCommand.create:
+          _newTerminal();
+        case TerminalCommand.close:
+          page!.closeActiveTerminal();
+        case TerminalCommand.split:
+          page!.splitActiveTerminal();
+        case null:
+          _selectTerminal(index);
       }
     }
     return KeyEventResult.handled;
+  }
+
+  void _newTerminal() {
+    if (!_shown) _toggle();
+    ref.read(terminalWorkspaceProvider(widget.sessionId!).notifier).newTerminal();
+    _terminalKey.currentState?.focusActiveTerminal();
   }
 
   void _selectTerminal(int index) {
@@ -102,7 +120,8 @@ class _TerminalDockLayoutState extends ConsumerState<TerminalDockLayout> {
 
   void _reset() {
     _shown = false;
-    _opened = false;
+    _terminalHold?.close();
+    _terminalHold = null;
     _previousFocus = null;
   }
 
@@ -118,9 +137,9 @@ class _TerminalDockLayoutState extends ConsumerState<TerminalDockLayout> {
       _hide();
     } else {
       _previousFocus = FocusManager.instance.primaryFocus;
+      _terminalHold ??= ref.listenManual(terminalWorkspaceProvider(widget.sessionId!), (_, _) {});
       setState(() {
         _shown = true;
-        _opened = true;
       });
     }
   }
@@ -180,7 +199,6 @@ class _TerminalDockLayoutState extends ConsumerState<TerminalDockLayout> {
   Widget build(BuildContext context) {
     final id = widget.sessionId;
     ref.listen(activeHostProvider, (_, _) => setState(_reset));
-    if (_opened && id != null) ref.watch(terminalWorkspaceProvider(id));
     final body = KeyedSubtree(key: _bodyKey, child: widget.body);
     final scaffold = AdaptiveScaffold(
       layout: widget.layout,

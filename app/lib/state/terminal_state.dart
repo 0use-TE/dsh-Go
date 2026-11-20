@@ -178,6 +178,9 @@ class TerminalWorkspaceState {
     this.error,
     this.tabs = const [],
     this.selectedId,
+    this.splitIds = const [],
+    this.rightTabIds = const [],
+    this.splitFraction = .5,
     this.environment,
   });
 
@@ -194,6 +197,18 @@ class TerminalWorkspaceState {
   final String? error;
   final List<TerminalTab> tabs;
   final String? selectedId;
+
+  /// Left/right PTYs when split; [selectedId] is the active one.
+  final List<String> splitIds;
+
+  /// Membership of the right group; all remaining tabs belong to the left.
+  final List<String> rightTabIds;
+  final double splitFraction;
+  bool get isSplit => splitIds.isNotEmpty;
+  List<TerminalTab> tabsForPane(int pane) =>
+      isSplit ? tabs.where((tab) => rightTabIds.contains(tab.id) == (pane == 1)).toList() : tabs;
+  List<TerminalTab> get visibleTabs =>
+      isSplit ? [for (final id in splitIds) tabs.firstWhere((tab) => tab.id == id)] : [?selected];
   final TerminalEnvironment? environment;
 
   TerminalTab? get selected {
@@ -209,6 +224,9 @@ class TerminalWorkspaceState {
     bool clearError = false,
     List<TerminalTab>? tabs,
     String? selectedId,
+    List<String>? splitIds,
+    List<String>? rightTabIds,
+    double? splitFraction,
     TerminalEnvironment? environment,
   }) => TerminalWorkspaceState(
     loading: loading ?? this.loading,
@@ -217,6 +235,9 @@ class TerminalWorkspaceState {
     error: clearError ? null : error ?? this.error,
     tabs: tabs ?? this.tabs,
     selectedId: selectedId ?? this.selectedId,
+    splitIds: splitIds ?? this.splitIds,
+    rightTabIds: rightTabIds ?? this.rightTabIds,
+    splitFraction: splitFraction ?? this.splitFraction,
     environment: environment ?? this.environment,
   );
 }
@@ -297,6 +318,9 @@ class TerminalWorkspace extends Notifier<TerminalWorkspaceState> {
   List<TerminalShell>? _shells;
   (int, int)? _viewSize;
   Completer<void>? _sized;
+  // New-terminal shortcuts received during the first listing are consumed by
+  // _load after success; listing failure or disposal discards the requests.
+  int _pendingCreates = 0;
 
   /// How long a new terminal waits for the screen to be measured, so the
   /// shell starts at the phone's size instead of 80 × 24.
@@ -340,6 +364,7 @@ class TerminalWorkspace extends Notifier<TerminalWorkspaceState> {
     }
     _resizes.clear();
     _shells = null;
+    _pendingCreates = 0;
     final sized = _sized;
     _sized = null;
     if (sized != null && !sized.isCompleted) sized.complete();
@@ -372,6 +397,8 @@ class TerminalWorkspace extends Notifier<TerminalWorkspaceState> {
         environment: environment,
         tabs: tabs,
         selectedId: (running.isEmpty ? tabs.firstOrNull : running.first)?.id,
+        splitIds: const [],
+        rightTabIds: const [],
       );
       for (final tab in tabs) {
         final link = _links.putIfAbsent(tab.id, () => _Link(tab.id));
@@ -381,9 +408,15 @@ class TerminalWorkspace extends Notifier<TerminalWorkspaceState> {
           _hold(link);
         }
       }
-      if (tabs.isEmpty) await newTerminal();
+      final requested = _pendingCreates;
+      _pendingCreates = 0;
+      if (tabs.isEmpty && requested == 0) await newTerminal();
+      for (var i = 0; i < requested && !_stale(epoch); i++) {
+        await newTerminal();
+      }
     } on Object catch (error) {
       if (_stale(epoch)) return;
+      _pendingCreates = 0;
       final message = TerminalCopy.isDisabledOnHost(error) ? TerminalCopy.disabledOnHost : TerminalCopy.offline;
       state = state.copyWith(loading: false, error: message);
     }
@@ -401,9 +434,29 @@ class TerminalWorkspace extends Notifier<TerminalWorkspaceState> {
   /// Shows [id]; a tab shown for the first time attaches now.
   void select(String id) {
     if (state.selectedId == id || _tab(id) == null) return;
-    state = state.copyWith(selectedId: id);
+    state = state.copyWith(selectedId: id, splitIds: _selectInSplit(id));
     _show(id);
   }
+
+  // A tab changes the selection of its own group, keeping the other pane intact.
+  List<String> _selectInSplit(String id) {
+    final ids = state.splitIds;
+    if (ids.isEmpty || ids.contains(id)) return ids;
+    final pane = state.rightTabIds.contains(id) ? 1 : 0;
+    return [...ids]..[pane] = id;
+  }
+
+  /// Split beside [id], creating a separate PTY on the right.
+  Future<void> splitTerminal(String id) async {
+    if (state.isSplit || _tab(id) == null) return;
+    select(id);
+    await newTerminal(split: true);
+  }
+
+  /// Keep the active PTY visible; the other process continues in its tab.
+  void unsplit() => state = state.copyWith(splitIds: const [], rightTabIds: const []);
+
+  void resizeSplit(double fraction) => state = state.copyWith(splitFraction: fraction.clamp(.2, .8));
 
   void _show(String id) {
     final tab = _tab(id);
@@ -419,9 +472,13 @@ class TerminalWorkspace extends Notifier<TerminalWorkspaceState> {
   /// Opens a new terminal ([shellPath] from [shells]; null uses the last
   /// choice when it is still installed, else the default). With [replacing],
   /// it takes that tab's place and the old terminal is closed.
-  Future<void> newTerminal({String? shellPath, String? replacing}) async {
+  Future<void> newTerminal({String? shellPath, String? replacing, bool split = false, int? pane}) async {
     final backend = _backend;
-    if (backend == null) return;
+    if (backend == null || !state.supported || state.offline || state.error != null) return;
+    if (state.loading) {
+      _pendingCreates++;
+      return;
+    }
     final id = newTerminalId();
     final tab = TerminalTab(id: id, terminal: _placeholder(id));
     final tabs = [...state.tabs];
@@ -432,7 +489,19 @@ class TerminalWorkspace extends Notifier<TerminalWorkspaceState> {
     } else {
       tabs.add(tab);
     }
-    state = state.copyWith(tabs: tabs, selectedId: id);
+    final splitting = split && !state.isSplit && state.selected != null;
+    final targetPane = pane ?? (state.rightTabIds.contains(replacing ?? state.selectedId) ? 1 : 0);
+    final splitIds = splitting
+        ? [state.selected!.id, id]
+        : (state.isSplit ? ([...state.splitIds]..[targetPane] = id) : const <String>[]);
+    final rightTabIds = splitting
+        ? [id]
+        : [
+            for (final tab in state.rightTabIds)
+              if (tab != replacing) tab,
+            if (state.isSplit && targetPane == 1) id,
+          ];
+    state = state.copyWith(tabs: tabs, selectedId: id, splitIds: splitIds, rightTabIds: rightTabIds);
     _links[id] = _Link(id)..shellPath = shellPath;
     if (shellPath != null) unawaited(_rememberShell(shellPath));
     await _create(id);
@@ -455,18 +524,38 @@ class TerminalWorkspace extends Notifier<TerminalWorkspaceState> {
     if (index < 0) return;
     final tabs = [...state.tabs]..removeAt(index);
     var selected = state.selectedId;
-    if (selected == id) {
+    var splitIds = state.splitIds;
+    var rightTabIds = state.rightTabIds.where((tab) => tab != id).toList();
+    if (state.isSplit) {
+      final pane = state.rightTabIds.contains(id) ? 1 : 0;
+      final group = state.tabsForPane(pane);
+      final remaining = group.where((tab) => tab.id != id).toList();
+      if (remaining.isEmpty) {
+        selected = splitIds[1 - pane];
+        splitIds = const [];
+        rightTabIds = [];
+      } else if (splitIds[pane] == id) {
+        final at = group.indexWhere((tab) => tab.id == id).clamp(0, remaining.length - 1);
+        splitIds = [...splitIds]..[pane] = remaining[at].id;
+        if (selected == id) selected = remaining[at].id;
+      }
+    } else if (selected == id) {
       selected = tabs.isEmpty ? null : tabs[index.clamp(0, tabs.length - 1)].id;
     }
     state = TerminalWorkspaceState(
       loading: false,
       tabs: tabs,
       selectedId: selected,
+      splitIds: splitIds,
+      rightTabIds: rightTabIds,
+      splitFraction: state.splitFraction,
       environment: state.environment,
       error: state.error,
     );
     _closeQuietly(id);
-    if (selected != null) _show(selected);
+    for (final tab in state.visibleTabs) {
+      _show(tab.id);
+    }
   }
 
   /// Renames on the Host; false (and the old title back) when it failed.

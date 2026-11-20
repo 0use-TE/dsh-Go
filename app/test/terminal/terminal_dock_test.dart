@@ -118,6 +118,15 @@ Future<void> _toggleKey(WidgetTester tester) async {
   await settleTerminal(tester);
 }
 
+Future<void> _shiftKey(WidgetTester tester, LogicalKeyboardKey key, {PhysicalKeyboardKey? physicalKey}) async {
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+  await tester.sendKeyEvent(key, physicalKey: physicalKey);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+  await settleTerminal(tester);
+}
+
 Future<void> _moveTab(
   WidgetTester tester,
   Finder tab,
@@ -201,6 +210,191 @@ void main() {
     await _pump(tester, backend, enabled: false);
     await _toggleKey(tester);
     expect(backend.calls, isEmpty);
+  });
+
+  testWidgets('new shortcut opens one initial terminal, then creates and focuses another without leaking keys', (
+    tester,
+  ) async {
+    final backend = FakeTerminalBackend();
+    final container = await _pump(tester, backend);
+    await _shiftKey(tester, LogicalKeyboardKey.quote, physicalKey: PhysicalKeyboardKey.backquote);
+    expect(backend.created, hasLength(1));
+    expect(find.byType(TerminalView), findsOneWidget);
+    final first = container.read(terminalWorkspaceProvider('s1')).selectedId!;
+    await _shiftKey(tester, LogicalKeyboardKey.backquote);
+    expect(backend.created, hasLength(2));
+    expect(backend.attachOf(first).written, isEmpty);
+    final active = tester.widget<TerminalView>(find.byType(TerminalView));
+    expect(active.focusNode!.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyX, character: 'x');
+    await settleTerminal(tester);
+    expect(backend.attachOf(container.read(terminalWorkspaceProvider('s1')).selectedId!).written, 'x');
+    await _toggleKey(tester);
+    await _shiftKey(tester, LogicalKeyboardKey.backquote);
+    expect(backend.created, hasLength(3));
+    expect(find.byType(TerminalView), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('new shortcut waits for existing host terminals before creating its own', (tester) async {
+    final backend = _SlowListing();
+    final container = await _pump(tester, backend);
+    await _shiftKey(tester, LogicalKeyboardKey.backquote);
+    expect(backend.created, isEmpty);
+    backend.listed.complete();
+    await settleTerminal(tester);
+    expect(
+      backend.created,
+      hasLength(1),
+      reason: '${backend.calls} ${container.read(terminalWorkspaceProvider('s1')).tabs.map((t) => t.phase)}',
+    );
+    expect(container.read(terminalWorkspaceProvider('s1')).tabs, hasLength(3));
+    expect(tester.widget<TerminalView>(find.byType(TerminalView)).focusNode!.hasFocus, isTrue);
+  });
+
+  testWidgets('split panes route input independently, resize, retain layout while hidden and merge after close', (
+    tester,
+  ) async {
+    final backend = FakeTerminalBackend(terminals: [infoJson('a'), infoJson('b')]);
+    final container = await _pump(tester, backend);
+    await _toggleKey(tester);
+    await _shiftKey(tester, LogicalKeyboardKey.digit6, physicalKey: PhysicalKeyboardKey.digit5);
+    final state = container.read(terminalWorkspaceProvider('s1'));
+    final right = state.selectedId!;
+    expect(state.splitIds, ['a', right]);
+    expect(find.byType(TerminalView), findsNWidgets(2));
+    final leftView = find.byWidgetPredicate(
+      (widget) => widget is TerminalView && widget.terminal == state.tabs.first.terminal,
+    );
+    final rightView = find.byWidgetPredicate(
+      (widget) => widget is TerminalView && widget.terminal == state.selected!.terminal,
+    );
+    final leftRect = tester.getRect(leftView);
+    expect(leftRect.right, lessThan(tester.getRect(rightView).left));
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyR, character: 'r');
+    await settleTerminal(tester);
+    expect(backend.attachOf(right).written, 'r');
+    expect(backend.attachOf('a').written, isEmpty);
+    await tester.tap(leftView);
+    await settleTerminal(tester);
+    expect(container.read(terminalWorkspaceProvider('s1')).selectedId, 'a');
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyL, character: 'l');
+    await settleTerminal(tester);
+    expect(backend.attachOf('a').written, 'l');
+    expect(backend.attachOf(right).written, 'r');
+    await tester.drag(find.byKey(const ValueKey('terminal-split-divider')), const Offset(55, 0));
+    await settleTerminal(tester);
+    expect(tester.getSize(leftView).width, greaterThan(leftRect.width));
+    expect(backend.attachOf('a').resizes, isNotEmpty);
+    expect(backend.attachOf(right).resizes, isNotEmpty);
+    await _toggleKey(tester);
+    backend.attachOf(right).output('background output\r\n');
+    await settleTerminal(tester);
+    await _toggleKey(tester);
+    expect(find.byType(TerminalView), findsNWidgets(2));
+    expect(container.read(terminalWorkspaceProvider('s1')).splitIds, ['a', right]);
+    expect(backend.created, hasLength(1));
+    await _shiftKey(tester, LogicalKeyboardKey.keyW);
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(backend.host, contains('a'));
+    await tester.tap(find.text('关闭').last);
+    await settleTerminal(tester);
+    expect(find.byType(TerminalView), findsNWidgets(2));
+    expect(container.read(terminalWorkspaceProvider('s1')).splitIds, ['b', right]);
+    await tester.tap(find.byKey(const ValueKey('terminal-tab-close-b')));
+    await settleTerminal(tester);
+    await tester.tap(find.text('关闭').last);
+    await settleTerminal(tester);
+    expect(find.byType(TerminalView), findsOneWidget);
+    expect(container.read(terminalWorkspaceProvider('s1')).selectedId, right);
+    expect(backend.host, isNot(contains('b')));
+    expect(backend.host, contains(right));
+    expect(backend.host, isNot(contains('a')));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('terminal close and split shortcuts leave the chat input untouched', (tester) async {
+    final backend = FakeTerminalBackend(terminals: [infoJson('a')]);
+    await _pump(tester, backend);
+    await _toggleKey(tester);
+    await tester.tap(find.byKey(_chat));
+    await settleTerminal(tester);
+    await _shiftKey(tester, LogicalKeyboardKey.digit5);
+    await _shiftKey(tester, LogicalKeyboardKey.keyW);
+    expect(find.byType(TerminalView), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(backend.created, isEmpty);
+    expect(backend.calls.where((call) => call.startsWith('close:')), isEmpty);
+  });
+
+  testWidgets('each split group owns a horizontal tab header and creates and selects terminals independently', (
+    tester,
+  ) async {
+    final backend = FakeTerminalBackend(terminals: [infoJson('a'), infoJson('b')]);
+    final container = await _pump(tester, backend);
+    TerminalWorkspaceState read() => container.read(terminalWorkspaceProvider('s1'));
+    await _toggleKey(tester);
+    await _shiftKey(tester, LogicalKeyboardKey.digit5);
+    final right = read().selectedId!;
+    final leftRail = find.byKey(const ValueKey('terminal-dock-tabs-0'));
+    final rightRail = find.byKey(const ValueKey('terminal-dock-tabs-1'));
+    Finder tab(String id) => find.byKey(ValueKey('terminal-tab-$id'));
+    expect(find.descendant(of: leftRail, matching: tab('a')), findsOneWidget);
+    expect(find.descendant(of: leftRail, matching: tab('b')), findsOneWidget);
+    expect(find.descendant(of: leftRail, matching: tab(right)), findsNothing);
+    expect(find.descendant(of: rightRail, matching: tab(right)), findsOneWidget);
+    expect(tester.getRect(leftRail).right, lessThan(tester.getRect(find.byKey(ValueKey('terminal-pane-$right'))).left));
+    expect(tester.getRect(leftRail).top, tester.getRect(rightRail).top);
+    expect(tester.getSize(leftRail).width, tester.getSize(rightRail).width);
+    expect(tester.getSize(leftRail).height, 36);
+    expect(tester.getRect(tab('b')).left, greaterThanOrEqualTo(tester.getRect(tab('a')).right));
+    expect(tester.getRect(tab('a')).top, tester.getRect(tab('b')).top);
+    final screens = tester.widgetList<TerminalView>(find.byType(TerminalView));
+    for (final screen in screens) {
+      expect(tester.getRect(find.byWidget(screen)).top, greaterThan(tester.getRect(leftRail).bottom));
+    }
+    await tester.tap(find.byKey(const ValueKey('terminal-new-0')));
+    await settleTerminal(tester);
+    final leftNew = read().selectedId!;
+    expect(read().splitIds, [leftNew, right]);
+    expect(find.descendant(of: leftRail, matching: tab(leftNew)), findsOneWidget);
+    expect(find.descendant(of: rightRail, matching: tab(leftNew)), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('terminal-new-1')));
+    await settleTerminal(tester);
+    final rightNew = read().selectedId!;
+    expect(read().splitIds, [leftNew, rightNew]);
+    expect(find.descendant(of: rightRail, matching: tab(rightNew)), findsOneWidget);
+    await tester.tap(tab('b'));
+    await settleTerminal(tester);
+    expect(read().splitIds, ['b', rightNew]);
+    await tester.tap(tab(right));
+    await settleTerminal(tester);
+    expect(read().splitIds, ['b', right]);
+    expect(read().tabsForPane(0).map((tab) => tab.id), ['a', 'b', leftNew]);
+    expect(read().tabsForPane(1).map((tab) => tab.id), [right, rightNew]);
+    expect(backend.calls.where((call) => call.startsWith('close:')), isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('header long-press splits and right-click unsplits without stopping either process', (tester) async {
+    final backend = FakeTerminalBackend(terminals: [infoJson('a')]);
+    final container = await _pump(tester, backend);
+    await _toggleKey(tester);
+    await tester.longPress(find.byKey(const ValueKey('terminal-tab-a')));
+    await settleTerminal(tester);
+    await tester.tap(find.text('向右分屏'));
+    await settleTerminal(tester);
+    expect(find.byType(TerminalView), findsNWidgets(2));
+    final right = container.read(terminalWorkspaceProvider('s1')).selectedId!;
+    await tester.tap(find.byKey(ValueKey('terminal-tab-$right')), buttons: kSecondaryMouseButton);
+    await settleTerminal(tester);
+    await tester.tap(find.text('取消分屏'));
+    await settleTerminal(tester);
+    expect(find.byType(TerminalView), findsOneWidget);
+    expect(container.read(terminalWorkspaceProvider('s1')).selectedId, right);
+    expect(backend.host.keys, containsAll(['a', right]));
+    expect(backend.calls.where((call) => call.startsWith('close:')), isEmpty);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('right-click delete confirms a running terminal and closes only that tab', (tester) async {
@@ -337,11 +531,10 @@ void main() {
     final tabs = container.read(terminalWorkspaceProvider('s1')).tabs;
     final firstRect = tester.getRect(find.byKey(ValueKey('terminal-tab-${tabs.first.id}')));
     final secondRect = tester.getRect(find.byKey(ValueKey('terminal-tab-${tabs.last.id}')));
-    expect(secondRect.top, greaterThanOrEqualTo(firstRect.bottom));
-    expect(secondRect.left, firstRect.left);
-    expect(firstRect.left, greaterThan(tester.getRect(find.byType(TerminalView)).right));
-    expect(firstRect.top, tester.getRect(find.byType(TerminalCardFrame)).top);
-    expect(tester.getSize(find.byKey(const ValueKey('terminal-dock-tabs'))).width, lessThan(90));
+    expect(secondRect.left, greaterThanOrEqualTo(firstRect.right));
+    expect(secondRect.top, firstRect.top);
+    expect(firstRect.bottom, lessThan(tester.getRect(find.byType(TerminalCardFrame)).top));
+    expect(tester.getSize(find.byKey(const ValueKey('terminal-dock-tabs'))).height, 36);
     expect(find.byKey(const ValueKey('terminal-dock-fullscreen')), findsNothing);
     final selected = container.read(terminalWorkspaceProvider('s1')).selected!;
     final attach = backend.attachOf(selected.id);

@@ -7355,6 +7355,8 @@
   "tavernPackCastUnproven": "Can't confirm this character was imported from this pack",
   "tavernPackCastOtherVersion": "The linked character comes from another version of this pack",
   "tavernPackExportChanged": "The export's sources or options changed; preview again",
+  "terminalSplitRight": "Split right",
+  "terminalUnsplit": "Unsplit",
   "terminalDockHide": "Hide terminal (Ctrl + `)",
   "terminalColorTitle": "Terminal colors",
   "terminalColorBlue": "Deep blue",

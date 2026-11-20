@@ -1,6 +1,22 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
+enum TerminalCommand { toggle, create, close, split }
+
+TerminalCommand? terminalCommandFor(KeyEvent event) {
+  final keyboard = HardwareKeyboard.instance;
+  if (!keyboard.isControlPressed || keyboard.isAltPressed || keyboard.isMetaPressed) return null;
+  final backquote =
+      event.logicalKey == LogicalKeyboardKey.backquote || event.physicalKey == PhysicalKeyboardKey.backquote;
+  if (backquote) return keyboard.isShiftPressed ? TerminalCommand.create : TerminalCommand.toggle;
+  if (!keyboard.isShiftPressed) return null;
+  if (event.logicalKey == LogicalKeyboardKey.keyW) return TerminalCommand.close;
+  if (event.logicalKey == LogicalKeyboardKey.digit5 || event.physicalKey == PhysicalKeyboardKey.digit5) {
+    return TerminalCommand.split;
+  }
+  return null;
+}
+
 const terminalNumberKeys = [
   LogicalKeyboardKey.digit1,
   LogicalKeyboardKey.digit2,

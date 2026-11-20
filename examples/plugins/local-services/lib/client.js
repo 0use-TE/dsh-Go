@@ -18,6 +18,10 @@ window.__ModuleLoader__.load({
     const icon = name => h('svg', { viewBox: '0 0 24 24', width: 20, height: 20, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true }, h('path', { d: paths[name] }))
     const button = (name, label, onClick, disabled = false) => h('button', { key: name, type: 'button', className: 'ls-icon', title: label, 'aria-label': label, onClick, disabled }, icon(name))
     const active = service => ['running', 'starting', 'stopping'].includes(service.status)
+    const endpoint = raw => {
+      const url = new URL(raw)
+      return url.hostname + ':' + (url.port || (url.protocol === 'https:' ? '443' : '80'))
+    }
     async function request(path, body) {
       const response = await fetch(API + path, { credentials: 'same-origin', ...(body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}) })
       const data = await response.json()
@@ -53,7 +57,9 @@ window.__ModuleLoader__.load({
       .dsh-ha-services .ls-subtitle{display:inline-flex;align-items:center;gap:4px;font-size:14px;color:var(--dsw-alias-label-tertiary,#929dad)}
       .dsh-ha-services .ls-subtitle[data-autostart=true]{color:var(--dsw-alias-brand-primary,#829beb)}
       .dsh-ha-services .ls-subtitle svg{flex:none;width:14px;height:14px}
-      .dsh-ha-services .ls-autostart{position:absolute;left:6px;bottom:8px;max-width:calc(100% - 74px);min-height:30px;padding:4px 6px;border:0;border-radius:6px;background:transparent;white-space:nowrap}
+      .dsh-ha-services .ls-service-meta{position:absolute;left:6px;right:68px;bottom:8px;display:flex;align-items:center;gap:8px;pointer-events:none}
+      .dsh-ha-services .ls-autostart{flex:none;min-height:30px;padding:4px 6px;border:0;border-radius:6px;background:transparent;white-space:nowrap;pointer-events:auto}
+      .dsh-ha-services .ls-endpoint{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:13px/1.5 ui-monospace,monospace;color:var(--dsw-alias-label-tertiary,#929dad);pointer-events:auto}
       .dsh-ha-services .ls-switch{position:relative;flex:none;width:38px;height:22px;min-width:38px;min-height:22px;border:0;border-radius:12px;padding:0;background:var(--dsw-alias-label-quaternary,#697386)}
       .dsh-ha-services .ls-switch[aria-checked=true]{background:var(--dsw-alias-brand-primary,#829beb)}
       .dsh-ha-services .ls-switch:focus-visible{box-shadow:0 0 0 4px var(--dsw-alias-interactive-bg-active,#ffffff24)}
@@ -171,11 +177,12 @@ window.__ModuleLoader__.load({
       const rows = services?.map(service => h('section', { className: 'ls-service', key: service.name },
         h('button', { type: 'button', className: 'ls-open', 'aria-label': service.name + t(' 详情', ' details'), onClick: () => open(service) },
           h('span', { className: 'ls-name' }, service.name)),
-        h('button', { type: 'button', className: 'ls-subtitle ls-autostart', 'data-autostart': service.autoStart,
+        h('div', { className: 'ls-service-meta' }, h('button', { type: 'button', className: 'ls-subtitle ls-autostart', 'data-autostart': service.autoStart,
           'aria-label': service.name + t(' 自启', ' autostart'), 'aria-pressed': service.autoStart, disabled: !!busy,
           title: service.autoStart ? t('关闭自启', 'Disable autostart') : t('开启自启', 'Enable autostart'),
           onClick: () => action('autostart', service, !service.autoStart) },
           icon(service.autoStart ? 'auto' : 'play'), service.autoStart ? t('自启', 'Auto') : t('手动', 'Manual')),
+          service.url ? h('span', { className: 'ls-endpoint', title: t('配置的访问地址：', 'Configured URL: ') + service.url }, endpoint(service.url)) : null),
         toggle(service)))
       let details
       if (selected) {

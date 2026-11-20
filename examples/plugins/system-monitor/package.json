@@ -1,0 +1,16 @@
+{
+  "name": "system-monitor",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": { ".": "./lib/index.js", "./client": "./lib/client.js", "./package.json": "./package.json" },
+  "files": ["lib", "cordis.patch.yml", "README.md", "README.en.md", "LICENSE"],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "check": "node --check lib/index.js && node --check lib/monitor.js && node --check lib/client.js"
+  },
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" }, "client": { "platform": "web" } },
+  "engines": { "node": ">=22.19", "dsh": ">=0.2.2-rc.1 <0.3.0-0" }
+}

@@ -17,6 +17,7 @@ A Web service panel and shared command interface for DSH Ha / dsh-Go. Manages ex
 - The gear replaces current content with prompt settings: Show prompt and Copy prompt only. Click the gear again or the back arrow to return to the previous list or details view.
 - Uses DSH's locale service for Chinese and English, including live language changes. Body text and service names are 16px, secondary information 14px, and toolbar buttons 40px with 10px icon padding. Rows have horizontal content padding and a gap between hover backgrounds and separators.
 - Icons and rows use the host's soft hover and pressed backgrounds, with a separate keyboard focus indicator. Details use capsule tabs and respect reduced motion preferences.
+- Services with a configured Web URL show a compact host and port, such as `127.0.0.1:3000`. This is the registered access URL, not a detected bind address. Services without a URL omit it.
 
 ## Install
 

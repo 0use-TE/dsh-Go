@@ -41,11 +41,34 @@ class NativePanelView extends ConsumerWidget {
     final state = ref.watch(nativeSurfaceProvider(key));
     final title = ref.watch(nativePluginTitleProvider(panel.package));
     final icon = ref.watch(nativeContributionsProvider.select((c) => c.plugin(panel.package)?.icon));
+    final settingsAction = switch (state.data) {
+      {'settingsAction': final String action} when action.isNotEmpty => action,
+      _ => null,
+    };
+    final bridge = ref.watch(nativeBridgeProvider);
+    final interactive = state.hasView && !state.offline && state.failure == null && bridge != null;
+    Future<bool> invoke(PluginAction action) => runNativeTap(
+      context,
+      ref,
+      package: panel.package,
+      surface: NativeSurface.panel,
+      id: panel.id,
+      scope: key.scope,
+      action: action.id,
+      value: action.args,
+      userGesture: action.source != PluginActionSource.change,
+      gestureAt: action.gestureAt,
+      target: key,
+      stillCurrent: () {
+        if (!context.mounted) return false;
+        final current = context.widget;
+        return current is NativePanelView && current.surfaceKey == key;
+      },
+    );
 
     final Widget body;
     final editableV2 = state.view is Map && (state.view as Map)['v'] == 2;
     if (state.hasView && (editableV2 || (!state.offline && state.failure == null))) {
-      final bridge = ref.watch(nativeBridgeProvider);
       final view = PluginView(
         key: ValueKey((host, key)),
         view: state.view,
@@ -54,26 +77,7 @@ class NativePanelView extends ConsumerWidget {
         showTitle: false,
         imageResolver: (src) =>
             src.startsWith('asset:') && bridge != null ? bridge.asset(panel.package, src.substring(6)) : null,
-        onAction: state.offline || state.failure != null || bridge == null
-            ? null
-            : (action) => runNativeTap(
-                context,
-                ref,
-                package: panel.package,
-                surface: NativeSurface.panel,
-                id: panel.id,
-                scope: key.scope,
-                action: action.id,
-                value: action.args,
-                userGesture: action.source != PluginActionSource.change,
-                gestureAt: action.gestureAt,
-                target: key,
-                stillCurrent: () {
-                  if (!context.mounted) return false;
-                  final current = context.widget;
-                  return current is NativePanelView && current.surfaceKey == key;
-                },
-              ),
+        onAction: interactive ? invoke : null,
       );
       body = !editableV2
           ? view
@@ -114,6 +118,22 @@ class NativePanelView extends ConsumerWidget {
     return PluginFrame(
       pluginName: title,
       icon: icon,
+      trailing: settingsAction == null
+          ? null
+          : IconButton(
+              key: ValueKey('native-panel-settings|${panel.package}|${panel.id}'),
+              icon: const Icon(AppIcons.settings, size: 18),
+              tooltip: l10n.commonSettings,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 24, height: PluginFrame.headerHeight),
+              visualDensity: VisualDensity.compact,
+              style: IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+              onPressed: !interactive
+                  ? null
+                  : () => invoke(
+                      PluginAction(id: settingsAction, source: PluginActionSource.button, path: 'data.settingsAction'),
+                    ),
+            ),
       // v1.2: the plugin's caption line, on its own small channel.
       child: micro == null
           ? body

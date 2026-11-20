@@ -5,6 +5,7 @@
 // name and value; `patch` and `stale` land on it.
 
 import 'package:dsh_app/plugins/native/native_model.dart';
+import 'package:dsh_app/plugins/native/native_state.dart';
 import 'package:dsh_app/plugins/seams/seams.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/ui/features/feature_catalog.dart';
@@ -232,6 +233,95 @@ void main() {
     await pumpFrames(tester);
     expect(find.text('插件已停用或找不到'), findsOneWidget);
     expect(find.text('重试'), findsOneWidget);
+  });
+
+  testWidgets('a successful retry clears its runtime diagnostic and preserves other issues', (tester) async {
+    usePhoneView(tester);
+    final bridge = FakeBridge(contributions([usagePlugin()]));
+    await tester.pumpWidget(
+      testApp(
+        const NativePanelPage(panel: _usage, sessionId: 's1'),
+        overrides: panelOverrides(bridge, inventory()),
+      ),
+    );
+    await pumpFrames(tester);
+    final container = ProviderScope.containerOf(tester.element(find.byType(NativePanelPage)));
+    final diagnostics = container.read(nativeDiagnosticsProvider.notifier);
+    expect(diagnostics.of(_usage.package).issues.single.pointer, '/runtime/usage');
+    diagnostics.report(_usage.package, '/runtime/other', [const NativeIssue('', 'Other failure')]);
+    bridge.views.addAll(usageBridge().views);
+    await tester.tap(find.text('重试'));
+    await pumpFrames(tester);
+    expect(find.text('¥0.42'), findsOneWidget);
+    expect(diagnostics.of(_usage.package).issues.map((i) => i.pointer), ['/runtime/other']);
+  });
+
+  testWidgets('the header gear replaces the same panel content and preserves its session', (tester) async {
+    usePhoneView(tester);
+    final bridge = usageBridge();
+    bridge.views['${_usage.package}/usage'] = DshGoView(
+      pkg: _usage.package,
+      id: 'usage',
+      view: const {
+        'type': 'stack',
+        'children': {r'$': 'data.content'},
+      },
+      data: const {
+        'settingsAction': 'open-settings',
+        'content': [
+          {'type': 'text', 'text': 'Service list'},
+        ],
+      },
+      live: true,
+    );
+    bridge.answer = (call) => DshGoInvokeResult.fromJson({
+      'effects': [
+        {
+          'type': 'patch',
+          'data': {
+            'content': call.action == 'open-settings'
+                ? [
+                    {'type': 'text', 'text': 'Autostart settings'},
+                    {
+                      'type': 'actions',
+                      'items': [
+                        {'label': 'Back to services', 'action': 'back'},
+                      ],
+                    },
+                  ]
+                : [
+                    {'type': 'text', 'text': 'Service list'},
+                  ],
+          },
+        },
+      ],
+    });
+    await tester.pumpWidget(
+      testApp(
+        const NativePanelPage(panel: _usage, sessionId: 's1'),
+        overrides: panelOverrides(bridge, inventory()),
+      ),
+    );
+    await pumpFrames(tester);
+    final settingsButton = find.byKey(ValueKey('native-panel-settings|${_usage.package}|usage'));
+    final route = ModalRoute.of(tester.element(find.byType(NativePanelView)));
+    expect(tester.getSize(settingsButton).height, lessThanOrEqualTo(PluginFrame.headerHeight));
+    await tester.tap(settingsButton);
+    await pumpFrames(tester);
+    expect(find.text('Autostart settings'), findsOneWidget);
+    expect(find.text('Service list'), findsNothing);
+    expect(find.byType(NativePanelPage), findsOneWidget);
+    expect(ModalRoute.of(tester.element(find.byType(NativePanelView))), same(route));
+    expect(find.byType(PluginFrame), findsOneWidget);
+    final call = bridge.invocations.single;
+    expect((call.id, call.action, call.scope.sessionId), ('usage', 'open-settings', 's1'));
+    expect(find.byKey(ValueKey('native-panel-sheet|${_usage.package}|settings')), findsNothing);
+    await tester.tap(find.text('Back to services'));
+    await pumpFrames(tester);
+    expect(find.text('Service list'), findsOneWidget);
+    expect(find.text('Autostart settings'), findsNothing);
+    expect(find.byType(PluginFrame), findsOneWidget);
+    expect(ModalRoute.of(tester.element(find.byType(NativePanelView))), same(route));
   });
 
   testWidgets('全部功能 lists a features panel and opens it natively', (tester) async {

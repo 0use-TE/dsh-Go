@@ -85,6 +85,7 @@ import '../shell/adaptive/adaptive_layout.dart' show WindowClass;
 import '../shell/drawer/folder_sheets.dart';
 import '../theme/app_icons.dart';
 import '../theme/theme.dart';
+import '../terminal/terminal_dock_scope.dart';
 import '../wallpaper/wallpaper_backdrop.dart';
 import '../workspace/workspace_switcher.dart' show showWorkspaceSheet;
 import '../workspace/workspaces_page.dart';
@@ -1585,6 +1586,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final sessionId = ref.watch(currentSessionProvider);
+    final terminalDock = TerminalDockScope.maybeOf(context);
     final connAsync = ref.watch(activeConnectionProvider);
     final conn = connAsync.value;
     final connected = conn != null;
@@ -2275,11 +2277,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                                               labels: frameLabels(generate, generateModel, _drafts.length),
                                             ),
                                     ),
-                                    accessory: sessionId == null || contextFraction == null
+                                    accessory: terminalDock == null && (sessionId == null || contextFraction == null)
                                         ? null
-                                        : ContextRing(
-                                            fraction: contextFraction,
-                                            onTap: () => _openUsage(sessionId, chat?.model),
+                                        : Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              if (sessionId != null && contextFraction != null)
+                                                ContextRing(
+                                                  fraction: contextFraction,
+                                                  onTap: () => _openUsage(sessionId, chat?.model),
+                                                ),
+                                              if (terminalDock != null)
+                                                IconButton(
+                                                  key: const ValueKey('composer-terminal-toggle'),
+                                                  icon: const Icon(AppIcons.terminal, size: 24),
+                                                  tooltip: l10n.hubTerminal,
+                                                  onPressed: terminalDock.toggle,
+                                                  style: IconButton.styleFrom(
+                                                    fixedSize: const Size.square(36),
+                                                    minimumSize: const Size.square(36),
+                                                    padding: EdgeInsets.zero,
+                                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                    foregroundColor: Theme.of(context).colorScheme.onSurface,
+                                                    backgroundColor: Theme.of(context).colorScheme.onSurface
+                                                        .withValues(alpha: 0.06),
+                                                  ),
+                                                ),
+                                            ],
                                           ),
                                   ),
                               ],

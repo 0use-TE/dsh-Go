@@ -482,6 +482,12 @@ class NativeDiagnosticsController extends Notifier<Map<String, NativeDiagnostics
 
   void view(String package, int bytes) => _update(package, (d) => d.copyWith(lastViewBytes: bytes));
 
+  /// A surface answered again: remove its runtime failure, keeping other diagnostics.
+  void resolved(String package, String pointer) {
+    if (!of(package).issues.any((issue) => issue.pointer == pointer)) return;
+    _update(package, (d) => d.copyWith(issues: d.issues.where((issue) => issue.pointer != pointer).toList()));
+  }
+
   void invoked(String package, Duration elapsed) => _update(package, (d) => d.copyWith(lastInvoke: elapsed));
 }
 

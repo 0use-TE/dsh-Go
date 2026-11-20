@@ -9,7 +9,7 @@ import 'session_tab.dart';
 
 /// The person's choices for wide windows. Both start unfolded.
 class LayoutPrefs {
-  const LayoutPrefs({this.sidebarOpen = true, this.panelOpen = true, this.loaded = false});
+  const LayoutPrefs({this.sidebarOpen = true, this.panelOpen = true, this.panelWidth, this.loaded = false});
 
   /// The conversation list unfolds into a sidebar when it fits.
   final bool sidebarOpen;
@@ -17,12 +17,16 @@ class LayoutPrefs {
   /// 对话详情 stays open beside the chat.
   final bool panelOpen;
 
+  /// The manually resized detail width; null keeps the automatic width.
+  final double? panelWidth;
+
   /// The stored values are in (until then, the defaults show).
   final bool loaded;
 
-  LayoutPrefs copyWith({bool? sidebarOpen, bool? panelOpen, bool? loaded}) => LayoutPrefs(
+  LayoutPrefs copyWith({bool? sidebarOpen, bool? panelOpen, double? panelWidth, bool? loaded}) => LayoutPrefs(
     sidebarOpen: sidebarOpen ?? this.sidebarOpen,
     panelOpen: panelOpen ?? this.panelOpen,
+    panelWidth: panelWidth ?? this.panelWidth,
     loaded: loaded ?? this.loaded,
   );
 
@@ -31,15 +35,17 @@ class LayoutPrefs {
       other is LayoutPrefs &&
       other.sidebarOpen == sidebarOpen &&
       other.panelOpen == panelOpen &&
+      other.panelWidth == panelWidth &&
       other.loaded == loaded;
 
   @override
-  int get hashCode => Object.hash(sidebarOpen, panelOpen, loaded);
+  int get hashCode => Object.hash(sidebarOpen, panelOpen, panelWidth, loaded);
 }
 
 class LayoutPrefsController extends Notifier<LayoutPrefs> {
   static const sidebarKey = 'layout_sidebar_open';
   static const panelKey = 'layout_detail_panel_open';
+  static const panelWidthKey = 'layout_detail_panel_width';
 
   late Future<void> _loaded;
 
@@ -56,6 +62,7 @@ class LayoutPrefsController extends Notifier<LayoutPrefs> {
       state = LayoutPrefs(
         sidebarOpen: prefs.getBool(sidebarKey) ?? true,
         panelOpen: prefs.getBool(panelKey) ?? true,
+        panelWidth: state.panelWidth ?? prefs.getDouble(panelWidthKey),
         loaded: true,
       );
     } catch (_) {
@@ -80,6 +87,18 @@ class LayoutPrefsController extends Notifier<LayoutPrefs> {
   Future<void> setSidebarOpen(bool open) => _save(sidebarKey, open, state.copyWith(sidebarOpen: open));
 
   Future<void> setPanelOpen(bool open) => _save(panelKey, open, state.copyWith(panelOpen: open));
+
+  void resizePanel(double width) => state = state.copyWith(panelWidth: width);
+
+  Future<void> savePanelWidth() async {
+    await _loaded;
+    if (!ref.mounted || state.panelWidth == null) return;
+    try {
+      await (await SharedPreferences.getInstance()).setDouble(panelWidthKey, state.panelWidth!);
+    } catch (_) {
+      // Kept for this run only, like the column visibility choices.
+    }
+  }
 
   Future<void> togglePanel() async {
     await _loaded;

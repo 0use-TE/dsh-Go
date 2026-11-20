@@ -80,6 +80,8 @@ class AdaptiveScaffold extends StatefulWidget {
     this.rail,
     this.panel,
     this.animate = true,
+    this.onPanelResize,
+    this.onPanelResizeEnd,
   });
 
   final AdaptiveLayout layout;
@@ -99,6 +101,8 @@ class AdaptiveScaffold extends StatefulWidget {
 
   /// False snaps every change (stored choices arriving at launch).
   final bool animate;
+  final ValueChanged<double>? onPanelResize;
+  final VoidCallback? onPanelResizeEnd;
 
   @override
   State<AdaptiveScaffold> createState() => _AdaptiveScaffoldState();
@@ -116,6 +120,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> with TickerProvider
   /// While the panel slides away it keeps its width and content.
   double _panelWidth = 0;
   Widget? _panelChild;
+  double _dragWidth = 0;
 
   @override
   void initState() {
@@ -282,6 +287,29 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> with TickerProvider
                   child: RepaintBoundary(child: widget.sidebar),
                 ),
         ),
+        if (layout.panelShown && widget.onPanelResize != null)
+          Positioned(
+            left: window.width - panelExtent - 6,
+            top: 0,
+            bottom: 0,
+            width: 12,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.resizeColumn,
+              child: GestureDetector(
+                key: const ValueKey('adaptive-panel-resize'),
+                behavior: HitTestBehavior.opaque,
+                onHorizontalDragStart: (_) => _dragWidth = layout.panelWidth,
+                onHorizontalDragUpdate: (details) {
+                  final max = window.width - inset.left - inset.right - layout.leftWidth - AdaptiveMetrics.chatMin;
+                  _dragWidth = (_dragWidth - details.delta.dx).clamp(AdaptiveMetrics.panelMin, max);
+                  widget.onPanelResize!(_dragWidth);
+                },
+                onHorizontalDragEnd: (_) => widget.onPanelResizeEnd?.call(),
+                onHorizontalDragCancel: widget.onPanelResizeEnd,
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ),
       ],
     );
   }

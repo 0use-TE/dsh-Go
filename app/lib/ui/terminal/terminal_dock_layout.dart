@@ -21,11 +21,15 @@ class TerminalDockLayout extends ConsumerStatefulWidget {
     required this.rail,
     required this.panel,
     this.enabled = true,
+    this.onPanelResize,
+    this.onPanelResizeEnd,
   });
   final String? sessionId;
   final AdaptiveLayout layout;
   final bool animate;
   final bool enabled;
+  final ValueChanged<double>? onPanelResize;
+  final VoidCallback? onPanelResizeEnd;
   final Widget body;
   final Widget sidebar;
   final Widget rail;
@@ -43,9 +47,48 @@ class _TerminalDockLayoutState extends ConsumerState<TerminalDockLayout> {
   final _bodyKey = GlobalKey();
   final _terminalKey = GlobalKey<TerminalPageState>();
 
+  @override
+  void initState() {
+    super.initState();
+    FocusManager.instance.addEarlyKeyEventHandler(_shortcut);
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.removeEarlyKeyEventHandler(_shortcut);
+    super.dispose();
+  }
+
+  // Run before focused editors/terminal/plugin controls can consume the keys.
+  KeyEventResult _shortcut(KeyEvent event) {
+    if (!mounted || widget.sessionId == null || !widget.enabled || ModalRoute.of(context)?.isCurrent == false) {
+      return KeyEventResult.ignored;
+    }
+    final keyboard = HardwareKeyboard.instance;
+    if (!keyboard.isControlPressed || keyboard.isAltPressed || keyboard.isShiftPressed || keyboard.isMetaPressed) {
+      return KeyEventResult.ignored;
+    }
+    final toggle =
+        event.logicalKey == LogicalKeyboardKey.backquote || event.physicalKey == PhysicalKeyboardKey.backquote;
+    final index = terminalNumberKeys.indexOf(event.logicalKey);
+    if (!toggle && index < 0) return KeyEventResult.ignored;
+    if (event is KeyDownEvent) {
+      if (toggle) {
+        _toggle();
+      } else {
+        _selectTerminal(index);
+      }
+    }
+    return KeyEventResult.handled;
+  }
+
   void _selectTerminal(int index) {
     if (!widget.enabled || ModalRoute.of(context)?.isCurrent == false) return;
-    if (!_shown) _toggle();
+    if (_shown) {
+      _terminalKey.currentState?.selectTab(index);
+      return;
+    }
+    _toggle();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _terminalKey.currentState?.selectTab(index);
     });
@@ -146,18 +189,13 @@ class _TerminalDockLayoutState extends ConsumerState<TerminalDockLayout> {
       sidebar: widget.sidebar,
       rail: widget.rail,
       panel: widget.panel,
+      onPanelResize: widget.enabled ? widget.onPanelResize : null,
+      onPanelResizeEnd: widget.onPanelResizeEnd,
     );
     if (id == null) return scaffold;
     return TerminalDockScope(
       toggle: _toggle,
-      child: CallbackShortcuts(
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.backquote, control: true, includeRepeats: false): _toggle,
-          for (final (index, key) in terminalNumberKeys.indexed)
-            SingleActivator(key, control: true, includeRepeats: false): () => _selectTerminal(index),
-        },
-        child: Focus(autofocus: true, child: scaffold),
-      ),
+      child: Focus(autofocus: true, child: scaffold),
     );
   }
 }

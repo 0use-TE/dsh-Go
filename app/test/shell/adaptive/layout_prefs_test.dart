@@ -72,4 +72,21 @@ void main() {
     expect(container.read(sessionDetailTabProvider), SessionTab.progress);
     expect(changes, 1);
   });
+
+  test('dragged panel width survives closing the panel and a new launch', () async {
+    SharedPreferences.setMockInitialValues({});
+    final first = ProviderContainer();
+    await _loaded(first);
+    final controller = first.read(layoutPrefsProvider.notifier);
+    controller.resizePanel(540);
+    await controller.savePanelWidth();
+    await controller.setPanelOpen(false);
+    expect(first.read(layoutPrefsProvider).panelWidth, 540);
+    first.dispose();
+    final second = ProviderContainer();
+    addTearDown(second.dispose);
+    final prefs = await _loaded(second);
+    expect(prefs.panelOpen, isFalse);
+    expect(prefs.panelWidth, 540);
+  });
 }

@@ -83,10 +83,11 @@ AdaptiveLayout _layoutFor(WidgetTester tester, {bool panelOpen = true, bool side
 /// The frame with stand-ins; [layout] is read on every build so a test can
 /// change it and pump.
 class _Host extends StatefulWidget {
-  const _Host({required this.layout, this.animate = false});
+  const _Host({required this.layout, this.animate = false, this.onResize});
 
   final AdaptiveLayout Function() layout;
   final bool animate;
+  final ValueChanged<double>? onResize;
 
   @override
   State<_Host> createState() => _HostState();
@@ -105,12 +106,23 @@ class _HostState extends State<_Host> {
       rail: const _Probe('rail'),
       sidebar: const _Probe('sidebar'),
       panel: layout.panelAvailable ? const _Probe('panel') : null,
+      onPanelResize: widget.onResize == null
+          ? null
+          : (width) {
+              widget.onResize!(width);
+              setState(() {});
+            },
     );
   }
 }
 
-Future<void> _pump(WidgetTester tester, AdaptiveLayout Function() layout, {bool animate = false}) async {
-  await tester.pumpWidget(testApp(_Host(layout: layout, animate: animate)));
+Future<void> _pump(
+  WidgetTester tester,
+  AdaptiveLayout Function() layout, {
+  bool animate = false,
+  ValueChanged<double>? onResize,
+}) async {
+  await tester.pumpWidget(testApp(_Host(layout: layout, animate: animate, onResize: onResize)));
   await tester.pump();
 }
 
@@ -118,6 +130,40 @@ Rect _rect(WidgetTester tester, String name) => tester.getRect(find.byKey(ValueK
 
 void main() {
   setUp(_ProbeState.created.clear);
+
+  testWidgets('panel separator resizes both columns without rebuilding chat, and disappears when folded', (
+    tester,
+  ) async {
+    _window(tester, const Size(1440, 900));
+    double? width;
+    var open = true;
+    AdaptiveLayout plan() => AdaptiveLayout.resolve(
+      window: const Size(1440, 900),
+      hasSession: true,
+      panelOpen: open,
+      preferredPanelWidth: width,
+    );
+    await _pump(tester, plan, onResize: (next) => width = next);
+    final handle = find.byKey(const ValueKey('adaptive-panel-resize'));
+    final panelBefore = _rect(tester, 'panel').width;
+    final leftBefore = plan().left;
+    await tester.drag(handle, const Offset(-120, 0));
+    await tester.pump();
+    expect(_rect(tester, 'panel').width, greaterThan(panelBefore + 80));
+    expect(plan().left, leftBefore);
+    expect(_ProbeState.created['chat'], 1);
+    await tester.drag(handle, const Offset(-5000, 0));
+    await tester.pump();
+    expect(_rect(tester, 'chat').width, AdaptiveMetrics.chatMin);
+    await tester.drag(handle, const Offset(5000, 0));
+    await tester.pump();
+    expect(_rect(tester, 'panel').width, AdaptiveMetrics.panelMin);
+    open = false;
+    tester.state<_HostState>(find.byType(_Host)).rebuild();
+    await tester.pump();
+    expect(handle, findsNothing);
+    expect(_ProbeState.created['chat'], 1);
+  });
 
   group('1280 × 800, panel shown', () {
     testWidgets('rail · chat · panel, edge to edge', (tester) async {

@@ -18,6 +18,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:dsh_app/state/terminal_color_state.dart';
 import 'package:dsh_app/ui/terminal/terminal_screen.dart';
+import 'package:dsh_app/ui/chat/chat_screen.dart';
+import 'package:dsh_app/ui/chat/composer.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -26,6 +28,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xterm/xterm.dart';
 
 import '../shell/golden_harness.dart';
+import '../chat/support/harness.dart' as chat;
 import '../plugins/native/native_panel_test.dart' as panels;
 import '../plugins/seats/support.dart' as seats;
 import 'support.dart';
@@ -53,6 +56,8 @@ Future<ProviderContainer> _pump(
   FakeTerminalBackend backend, {
   List<Override> overrides = const [],
   bool plugins = false,
+  Widget? body,
+  bool enabled = true,
 }) async {
   await tester.runAsync(loadGoldenFonts);
   tester.view.devicePixelRatio = 1;
@@ -70,6 +75,7 @@ Future<ProviderContainer> _pump(
         body: Consumer(
           builder: (context, ref, _) => TerminalDockLayout(
             sessionId: 's1',
+            enabled: enabled,
             animate: false,
             layout: AdaptiveLayout.resolve(
               window: MediaQuery.sizeOf(context),
@@ -78,7 +84,7 @@ Future<ProviderContainer> _pump(
               sidebarOpen: false,
               panelOpen: ref.watch(layoutPrefsProvider).panelOpen,
             ),
-            body: const Center(child: TextField(key: _chat)),
+            body: body ?? const Center(child: TextField(key: _chat)),
             sidebar: const SizedBox(),
             rail: const SizedBox(),
             panel: plugins
@@ -140,6 +146,176 @@ Future<void> _moveTab(
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  testWidgets('global terminal shortcut beats a key-consuming plugin and matches the physical backquote', (
+    tester,
+  ) async {
+    final focus = FocusNode();
+    addTearDown(focus.dispose);
+    final backend = FakeTerminalBackend();
+    await _pump(
+      tester,
+      backend,
+      body: Focus(focusNode: focus, onKeyEvent: (_, _) => KeyEventResult.handled, child: const SizedBox.expand()),
+    );
+    focus.requestFocus();
+    await settleTerminal(tester);
+    await _toggleKey(tester);
+    expect(find.byType(TerminalView), findsOneWidget);
+    await _toggleKey(tester);
+    expect(find.byType(TerminalView), findsNothing);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.quote, physicalKey: PhysicalKeyboardKey.backquote);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await settleTerminal(tester);
+    expect(find.byType(TerminalView), findsOneWidget);
+    expect(backend.created, hasLength(1));
+  });
+
+  testWidgets('terminal shortcuts leave dialogs alone and are removed with the home workspace', (tester) async {
+    final backend = FakeTerminalBackend();
+    await _pump(tester, backend);
+    final context = tester.element(find.byType(TerminalDockLayout));
+    unawaited(
+      showDialog<void>(
+        context: context,
+        builder: (_) => const AlertDialog(content: TextField()),
+      ),
+    );
+    await settleTerminal(tester);
+    await _toggleKey(tester);
+    expect(backend.created, isEmpty);
+    Navigator.of(context).pop();
+    await settleTerminal(tester);
+    await _toggleKey(tester);
+    expect(backend.created, hasLength(1));
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: TextField())));
+    await settleTerminal(tester);
+    await _toggleKey(tester);
+    expect(backend.created, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('drawer overlay disables terminal shortcuts', (tester) async {
+    final backend = FakeTerminalBackend();
+    await _pump(tester, backend, enabled: false);
+    await _toggleKey(tester);
+    expect(backend.calls, isEmpty);
+  });
+
+  testWidgets('right-click delete confirms a running terminal and closes only that tab', (tester) async {
+    final backend = FakeTerminalBackend(terminals: [infoJson('a'), infoJson('b')]);
+    final container = await _pump(tester, backend);
+    await _toggleKey(tester);
+    await tester.tap(find.byKey(const ValueKey('terminal-tab-a')), buttons: kSecondaryMouseButton);
+    await settleTerminal(tester);
+    expect(find.text('重命名'), findsOneWidget);
+    await tester.tap(find.text('删除'));
+    await settleTerminal(tester);
+    expect(backend.host, contains('a'));
+    expect(find.byType(AlertDialog), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await settleTerminal(tester);
+    expect(container.read(terminalWorkspaceProvider('s1')).tabs, hasLength(2));
+    await tester.tap(find.byKey(const ValueKey('terminal-tab-a')), buttons: kSecondaryMouseButton);
+    await settleTerminal(tester);
+    await tester.tap(find.text('删除'));
+    await settleTerminal(tester);
+    await tester.tap(find.text('关闭').last);
+    await settleTerminal(tester);
+    expect(backend.host, isNot(contains('a')));
+    expect(backend.host, contains('b'));
+    expect(container.read(terminalWorkspaceProvider('s1')).tabs.single.id, 'b');
+  });
+
+  testWidgets('header close button confirms and closes only its terminal', (tester) async {
+    final backend = FakeTerminalBackend(terminals: [infoJson('a'), infoJson('b')]);
+    final container = await _pump(tester, backend);
+    await _toggleKey(tester);
+    expect(find.byKey(const ValueKey('terminal-tab-close-a')), findsOneWidget);
+    expect(find.byKey(const ValueKey('terminal-tab-close-b')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('terminal-tab-b')));
+    await settleTerminal(tester);
+    await tester.tap(find.byKey(const ValueKey('terminal-tab-close-b')));
+    await settleTerminal(tester);
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(backend.host, contains('b'));
+    await tester.tap(find.text('关闭').last);
+    await settleTerminal(tester);
+    expect(backend.host, contains('a'));
+    expect(backend.host, isNot(contains('b')));
+    expect(container.read(terminalWorkspaceProvider('s1')).tabs.single.id, 'a');
+    expect(find.byKey(const ValueKey('terminal-dock-hide')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('long-press menu renames the targeted tab without replacing its terminal', (tester) async {
+    final backend = FakeTerminalBackend(terminals: [infoJson('a'), infoJson('b')]);
+    final container = await _pump(tester, backend);
+    await _toggleKey(tester);
+    await tester.longPress(find.byKey(const ValueKey('terminal-tab-b')));
+    await settleTerminal(tester);
+    expect(find.text('删除'), findsOneWidget);
+    await tester.tap(find.text('重命名'));
+    await settleTerminal(tester);
+    final dialog = find.byType(AlertDialog);
+    await tester.enterText(find.descendant(of: dialog, matching: find.byType(TextField)), 'dev server');
+    await tester.tap(find.text('保存'));
+    await settleTerminal(tester);
+    final tabs = container.read(terminalWorkspaceProvider('s1')).tabs;
+    expect(tabs.map((tab) => tab.id), ['a', 'b']);
+    expect(tabs.singleWhere((tab) => tab.id == 'b').title, 'dev server');
+    expect(backend.created, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('composer terminal button toggles the dock and keeps the draft and terminal', (tester) async {
+    await chat.loadTestFonts();
+    chat.usePhoneView(tester);
+    final backend = FakeTerminalBackend();
+    final harness = chat.ChatHarness(session: 's1');
+    await tester.pumpWidget(
+      chat.testApp(
+        Builder(
+          builder: (context) => TerminalDockLayout(
+            sessionId: 's1',
+            animate: false,
+            layout: AdaptiveLayout.resolve(
+              window: MediaQuery.sizeOf(context),
+              padding: EdgeInsets.zero,
+              hasSession: true,
+              sidebarOpen: false,
+              panelOpen: false,
+            ),
+            body: const ChatScreen(),
+            sidebar: const SizedBox(),
+            rail: const SizedBox(),
+            panel: null,
+          ),
+        ),
+        overrides: [...harness.overrides, ...terminalOverrides(backend)],
+      ),
+    );
+    await chat.pumpFrames(tester);
+    final input = find.descendant(of: find.byType(Composer), matching: find.byType(TextField));
+    await tester.enterText(input, 'keep my draft');
+    final button = find.byKey(const ValueKey('composer-terminal-toggle'));
+    expect(tester.getSize(button), const Size.square(36));
+    final composer = tester.getRect(find.byType(Composer));
+    expect(tester.getCenter(button).dx, greaterThan(composer.center.dx));
+    await tester.tap(button);
+    await settleTerminal(tester);
+    expect(find.byType(TerminalPage), findsOneWidget);
+    expect(backend.created, hasLength(1));
+    await tester.tap(button);
+    await settleTerminal(tester);
+    expect(find.byType(TerminalPage), findsNothing);
+    expect(tester.widget<Composer>(find.byType(Composer)).controller.text, 'keep my draft');
+    await tester.tap(button);
+    await settleTerminal(tester);
+    expect(backend.created, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('terminal is lazy, preserves tabs and hidden output, and owns keyboard input only while open', (
     tester,

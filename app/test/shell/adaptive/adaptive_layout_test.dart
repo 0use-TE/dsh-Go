@@ -24,6 +24,32 @@ AdaptiveLayout _resolve(
 );
 
 void main() {
+  test('manual panel widths keep the left column stable and reserve the chat minimum', () {
+    for (final sidebar in [true, false]) {
+      for (final width in [840.0, 1280.0, 1440.0, 1920.0]) {
+        final normal = _resolve(width, sidebarOpen: sidebar);
+        for (final preferred in [200.0, 540.0, 3000.0]) {
+          final resized = AdaptiveLayout.resolve(
+            window: Size(width, 800),
+            hasSession: true,
+            sidebarOpen: sidebar,
+            preferredPanelWidth: preferred,
+          );
+          expect(resized.left, normal.left);
+          expect(resized.panelWidth, greaterThanOrEqualTo(AdaptiveMetrics.panelMin));
+          expect(resized.chatRect.width, greaterThanOrEqualTo(AdaptiveMetrics.chatMin));
+        }
+      }
+    }
+    final narrow = AdaptiveLayout.resolve(
+      window: const Size(840, 800),
+      padding: const EdgeInsets.only(right: 80),
+      hasSession: true,
+      preferredPanelWidth: 600,
+    );
+    expect(narrow.panelShown, isFalse);
+    expect(narrow.panelWidth, 0);
+  });
   group('window classes', () {
     test('Material 3 breakpoints', () {
       expect(WindowClass.of(390), WindowClass.compact);

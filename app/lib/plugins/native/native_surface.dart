@@ -221,6 +221,7 @@ class NativeSurfaceController extends Notifier<NativeSurfaceState> {
       final view = await client.view(key.package, key.id, scope: key.scope, caps: ref.read(nativeCapsProvider));
       if (!ref.mounted || read != _reads) return;
       _diagnostics.view(key.package, view.bytes);
+      _diagnostics.resolved(key.package, key.pointer);
       _diagnostics.report(key.package, '', [for (final i in view.issues) NativeIssue.fromBridge(i)]);
       _rev = view.rev;
       _data = view.data;
@@ -258,6 +259,7 @@ class NativeSurfaceController extends Notifier<NativeSurfaceState> {
     if (!ref.mounted) return;
     switch (event) {
       case DshGoData(:final data, :final rev):
+        _diagnostics.resolved(key.package, key.pointer);
         _rev = rev;
         _data = data;
         _set(

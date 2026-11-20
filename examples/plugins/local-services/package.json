@@ -1,0 +1,17 @@
+{
+  "name": "local-services",
+  "version": "0.1.11",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": { ".": "./lib/index.js", "./client": "./lib/client.js", "./package.json": "./package.json" },
+  "bin": { "dsh-svc": "bin/dsh-svc.mjs" },
+  "files": ["lib", "bin", "cordis.patch.yml", "README.md", "README.en.md", "AGENT-PROMPT.md", "AGENT-PROMPT.en.md", "LICENSE"],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/web.js"
+  },
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" }, "client": { "platform": "web" } },
+  "engines": { "node": ">=22.19", "dsh": ">=0.2.2-rc.1 <0.3.0-0" }
+}

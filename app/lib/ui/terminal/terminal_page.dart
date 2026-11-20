@@ -29,6 +29,8 @@ import '../workspace/text_prompt.dart';
 import 'terminal_keys.dart';
 import 'terminal_screen.dart';
 
+enum _DockTabAction { rename, delete }
+
 /// The conversation's terminal (a full-screen detail page): the bar with
 /// 「终端」 over the current directory, a row of capsule tabs, then one dark
 /// terminal card whose bottom slot is the key row above the keyboard.
@@ -101,6 +103,45 @@ class TerminalPageState extends ConsumerState<TerminalPage> {
   }
 
   // ── Actions ──
+
+  Future<void> _showDockMenu(TerminalTab tab, Offset position) async {
+    final overlay = Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+    final point = overlay.globalToLocal(position);
+    final l10n = context.l10n;
+    final action = await showMenu<_DockTabAction>(
+      context: context,
+      position: RelativeRect.fromRect(Rect.fromLTWH(point.dx, point.dy, 0, 0), Offset.zero & overlay.size),
+      items: [
+        PopupMenuItem(
+          value: _DockTabAction.rename,
+          height: 36,
+          child: Row(
+            children: [const Icon(AppIcons.rename, size: 16), const SizedBox(width: 8), Text(l10n.commonRename)],
+          ),
+        ),
+        PopupMenuItem(
+          value: _DockTabAction.delete,
+          height: 36,
+          child: Row(
+            children: [
+              Icon(AppIcons.delete, size: 16, color: DshColors.of(context).danger),
+              const SizedBox(width: 8),
+              Text(l10n.commonDelete, style: TextStyle(color: DshColors.of(context).danger)),
+            ],
+          ),
+        ),
+      ],
+    );
+    if (!mounted) return;
+    switch (action) {
+      case _DockTabAction.rename:
+        await _rename(tab);
+      case _DockTabAction.delete:
+        await _close(tab);
+      case null:
+        break;
+    }
+  }
 
   Future<void> _showActions(TerminalTab tab) {
     final workspace = ref.read(_provider.notifier);
@@ -239,8 +280,6 @@ class TerminalPageState extends ConsumerState<TerminalPage> {
           tab: selected,
           focusNode: _focus,
           modifiers: _modifiers,
-          onToggleDock: widget.onHide,
-          onSelectTab: widget.onHide == null ? null : selectTab,
           showExtraKeys: widget.onHide == null,
         ),
       );
@@ -269,38 +308,56 @@ class TerminalPageState extends ConsumerState<TerminalPage> {
                             child: Semantics(
                               selected: tab.id == selected?.id,
                               inMutuallyExclusiveGroup: true,
-                              child: TextButton(
-                                key: ValueKey('terminal-tab-${tab.id}'),
-                                style: TextButton.styleFrom(
-                                  alignment: Alignment.centerLeft,
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                                  minimumSize: const Size(0, 32),
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                  backgroundColor: tab.id == selected?.id ? theme.colorScheme.secondaryContainer : null,
-                                ),
-                                onPressed: () {
-                                  workspace.select(tab.id);
-                                  _focus.requestFocus();
-                                },
-                                onLongPress: () => unawaited(_showActions(tab)),
-                                child: Row(
-                                  children: [
-                                    Text(
-                                      '${index + 1}',
-                                      style: theme.textTheme.labelSmall?.copyWith(
-                                        color: theme.colorScheme.onSurfaceVariant,
+                              child: GestureDetector(
+                                onSecondaryTapUp: (event) => unawaited(_showDockMenu(tab, event.globalPosition)),
+                                onLongPressStart: (event) => unawaited(_showDockMenu(tab, event.globalPosition)),
+                                child: TextButton(
+                                  key: ValueKey('terminal-tab-${tab.id}'),
+                                  style: TextButton.styleFrom(
+                                    alignment: Alignment.centerLeft,
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    minimumSize: const Size(0, 32),
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    backgroundColor: tab.id == selected?.id
+                                        ? theme.colorScheme.secondaryContainer
+                                        : null,
+                                  ),
+                                  onPressed: () {
+                                    workspace.select(tab.id);
+                                    _focus.requestFocus();
+                                  },
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        '${index + 1}',
+                                        style: theme.textTheme.labelSmall?.copyWith(
+                                          color: theme.colorScheme.onSurfaceVariant,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        tab.title.isEmpty ? l10n.botsTerminal : tab.title,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          tab.title.isEmpty ? l10n.botsTerminal : tab.title,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                      IconButton(
+                                        key: ValueKey('terminal-tab-close-${tab.id}'),
+                                        tooltip: l10n.commonClose,
+                                        style: IconButton.styleFrom(
+                                          minimumSize: const Size.square(24),
+                                          fixedSize: const Size.square(24),
+                                          padding: EdgeInsets.zero,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          foregroundColor: theme.colorScheme.onSurfaceVariant,
+                                        ),
+                                        icon: const Icon(AppIcons.close, size: 14),
+                                        onPressed: () => unawaited(_close(tab)),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),

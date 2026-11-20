@@ -71,6 +71,28 @@ void main() {
   });
   tearDown(thawClocks);
 
+  testWidgets('right separator adjusts the real chat and panel, keeps the draft, and hides when folded', (
+    tester,
+  ) async {
+    await _pumpHome(tester);
+    final input = find.descendant(of: find.byType(Composer), matching: find.byType(TextField));
+    await tester.enterText(input, 'resize draft');
+    final before = tester.getSize(find.byType(RightWorkspacePanel)).width;
+    await tester.drag(find.byKey(const ValueKey('adaptive-panel-resize')), const Offset(-100, 0));
+    await pumpFrames(tester);
+    final expanded = tester.getSize(find.byType(RightWorkspacePanel)).width;
+    expect(expanded, greaterThan(before + 60));
+    expect(tester.widget<Composer>(find.byType(Composer)).controller.text, 'resize draft');
+    await tester.tap(find.byKey(const ValueKey('panel-collapse')));
+    await pumpFrames(tester, 8);
+    expect(find.byKey(const ValueKey('adaptive-panel-resize')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('chat-panel-key')));
+    await pumpFrames(tester, 8);
+    expect(tester.getSize(find.byType(RightWorkspacePanel)).width, expanded);
+    expect(tester.widget<Composer>(find.byType(Composer)).controller.text, 'resize draft');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'embedded plugins keep the original navigation and view list; independent display moves only its package',
     (tester) async {

@@ -18,7 +18,6 @@ import '../theme/app_icons.dart';
 import '../theme/theme.dart';
 import 'terminal_keyboard.dart';
 import 'terminal_keys.dart';
-import 'terminal_dock_scope.dart';
 import 'terminal_palette.dart';
 import '../common/brief_notice.dart';
 
@@ -41,22 +40,25 @@ class TerminalCardFrame extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ambient = Theme.of(context);
     final palette = TerminalPalette.forAccent(DshSurfaces.of(context).accent, color: ref.watch(terminalColorProvider));
-    return TerminalPaletteScope(palette: palette, child: Theme(
-      data: ambient.brightness == Brightness.dark ? ambient : _darkThemeFor(DshSurfaces.of(context).accent),
-      child: DecoratedBox(
-        decoration: ShapeDecoration(
-          color: palette.background,
-          shape: RoundedSuperellipseBorder(
+    return TerminalPaletteScope(
+      palette: palette,
+      child: Theme(
+        data: ambient.brightness == Brightness.dark ? ambient : _darkThemeFor(DshSurfaces.of(context).accent),
+        child: DecoratedBox(
+          decoration: ShapeDecoration(
+            color: palette.background,
+            shape: RoundedSuperellipseBorder(
+              borderRadius: AppShape.radiusLg,
+              side: BorderSide(color: palette.hairline, width: 0.5),
+            ),
+          ),
+          child: ClipRSuperellipse(
             borderRadius: AppShape.radiusLg,
-            side: BorderSide(color: palette.hairline, width: 0.5),
+            child: Material(type: MaterialType.transparency, child: child),
           ),
         ),
-        child: ClipRSuperellipse(
-          borderRadius: AppShape.radiusLg,
-          child: Material(type: MaterialType.transparency, child: child),
-        ),
       ),
-    ));
+    );
   }
 }
 
@@ -88,8 +90,6 @@ class TerminalScreen extends ConsumerStatefulWidget {
     required this.tab,
     required this.focusNode,
     required this.modifiers,
-    this.onToggleDock,
-    this.onSelectTab,
     this.showExtraKeys = true,
   });
 
@@ -97,8 +97,6 @@ class TerminalScreen extends ConsumerStatefulWidget {
   final TerminalTab tab;
   final FocusNode focusNode;
   final TerminalModifiers modifiers;
-  final VoidCallback? onToggleDock;
-  final ValueChanged<int>? onSelectTab;
   final bool showExtraKeys;
 
   /// Inner padding of the screen inside the card.
@@ -190,24 +188,6 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
   /// Hardware keys: wait while the IME composes; sticky modifiers apply to
   /// the next printable key.
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
-    if (widget.onToggleDock != null &&
-        event.logicalKey == LogicalKeyboardKey.backquote &&
-        HardwareKeyboard.instance.isControlPressed &&
-        !HardwareKeyboard.instance.isAltPressed &&
-        !HardwareKeyboard.instance.isShiftPressed &&
-        !HardwareKeyboard.instance.isMetaPressed) {
-      if (event is KeyDownEvent) widget.onToggleDock!();
-      return KeyEventResult.handled;
-    }
-    if (widget.onSelectTab != null && HardwareKeyboard.instance.isControlPressed &&
-        !HardwareKeyboard.instance.isAltPressed && !HardwareKeyboard.instance.isShiftPressed &&
-        !HardwareKeyboard.instance.isMetaPressed) {
-      final index = terminalNumberKeys.indexOf(event.logicalKey);
-      if (index >= 0) {
-        if (event is KeyDownEvent) widget.onSelectTab!(index);
-        return KeyEventResult.handled;
-      }
-    }
     if (_keyboard.currentState?.composing ?? false) return KeyEventResult.skipRemainingHandlers;
     if (event is KeyUpEvent || !widget.modifiers.any) return KeyEventResult.ignored;
     final character = event.character;

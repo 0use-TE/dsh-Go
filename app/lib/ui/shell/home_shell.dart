@@ -298,6 +298,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with TickerProviderStateM
       hasSession: sessionId != null,
       sidebarOpen: prefs.sidebarOpen,
       panelOpen: prefs.panelOpen,
+      preferredPanelWidth: prefs.panelWidth,
     );
     // No quick panel beside a sidebar (the swipes are off there), or once
     // it's turned off: one left open goes, at once, as the window changes.
@@ -386,6 +387,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with TickerProviderStateM
                           child: TerminalDockLayout(
                             sessionId: sessionId,
                             enabled: !_open && !_quickPanelOpen,
+                            onPanelResize: ref.read(layoutPrefsProvider.notifier).resizePanel,
+                            onPanelResizeEnd: () => unawaited(ref.read(layoutPrefsProvider.notifier).savePanelWidth()),
                             layout: layout,
                             // Stored choices arriving at launch snap into place.
                             animate: prefs.loaded,

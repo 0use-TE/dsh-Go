@@ -65,6 +65,9 @@ class FixedLayoutPrefs extends LayoutPrefsController {
 
   @override
   Future<void> togglePanel() => setPanelOpen(!state.panelOpen);
+
+  @override
+  Future<void> savePanelWidth() async {}
 }
 
 /// The drawer's workspace switcher would open a socket on the fake host.

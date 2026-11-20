@@ -146,6 +146,7 @@ class AdaptiveLayout {
     required bool hasSession,
     bool sidebarOpen = true,
     bool panelOpen = true,
+    double? preferredPanelWidth,
   }) {
     final windowClass = WindowClass.ofSize(window);
     if (windowClass != WindowClass.expanded) {
@@ -169,12 +170,19 @@ class AdaptiveLayout {
     final fittedWidth = shown && fits
         ? math.min(width, (sidebarRoom / AdaptiveMetrics.panelStep).floorToDouble() * AdaptiveMetrics.panelStep)
         : width;
+    // Resizing keeps the sidebar choice stable and reserves a usable chat.
+    final panelLeft = sidebarOpen && sidebarRoom >= panelLowerBound
+        ? AdaptiveMetrics.sidebarWidth
+        : AdaptiveMetrics.railWidth;
+    final resizedWidth = available && preferredPanelWidth != null
+        ? preferredPanelWidth.clamp(AdaptiveMetrics.panelMin, inner - panelLeft - AdaptiveMetrics.chatMin)
+        : null;
     return AdaptiveLayout(
       windowClass: windowClass,
       window: window,
       padding: padding,
       left: sidebarOpen && fits ? LeftPane.sidebar : LeftPane.rail,
-      panelWidth: available ? fittedWidth : 0,
+      panelWidth: available ? resizedWidth ?? fittedWidth : 0,
       panelAvailable: available,
       panelShown: shown,
       sidebarFits: fits,
